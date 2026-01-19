@@ -1,4 +1,5 @@
 import { Shell } from "./components/layout/Shell";
+import { NewResearchRunForm } from "./components/research/NewResearchRunForm";
 
 function App() {
   return (
@@ -14,14 +15,7 @@ function App() {
       </header>
 
       <main>
-        <section className="rounded-xl border border-app-border bg-app-surface p-6 shadow-soft">
-          <h2 className="text-lg font-medium">New Research Run</h2>
-          <p className="mt-2 text-sm text-app-muted">
-            The UI will go here. Soon, you&apos;ll be able to ask complex
-            questions and see full research plans, sources, and synthesized
-            answers.
-          </p>
-        </section>
+        <NewResearchRunForm />
       </main>
     </Shell>
   );
