@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -73,3 +73,32 @@ async def get_research_run(
         )
 
     return run
+
+
+@router.get(
+    "",
+    response_model=list[ResearchRunRead],
+    status_code=status.HTTP_200_OK,
+)
+async def list_research_runs(
+    limit: int = 20,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+) -> list[ResearchRunRead]:
+    """
+    List research runs, newest first.
+
+    For now this is a simple cursor with limit/offset.
+    We'll refine filtering and pagination later if needed.
+    """
+    stmt = (
+        select(ResearchRun)
+        .order_by(desc(ResearchRun.created_at))
+        .limit(limit)
+        .offset(offset)
+    )
+
+    result = await db.execute(stmt)
+    runs = result.scalars().all()
+
+    return list(runs)
