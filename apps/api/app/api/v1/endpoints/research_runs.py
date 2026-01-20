@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.db.models import ResearchRun, ResearchRunStatus
 from app.db.session import get_db
 from app.schemas.research_runs import ResearchRunCreate, ResearchRunRead
+from app.services.research_service import create_research_run_with_basic_plan
 
 router = APIRouter(
     prefix="/research-runs",
@@ -25,23 +26,16 @@ async def create_research_run(
     db: AsyncSession = Depends(get_db),
 ) -> ResearchRunRead:
     """
-    Create a new research run in 'pending' status.
+    Create a new research run with an initial planner step.
 
-    For now this only persists the run; the agent orchestration pipeline
-    will be triggered in a later step.
+    The planner is currently a simple rule-based function that generates
+    generic sub-questions. Later this will be replaced with an LLM-backed
+    planner agent and a more complete orchestration pipeline.
     """
-    settings = get_settings()
-
-    run = ResearchRun(
-        query=payload.query,
-        title=payload.title,
-        status=ResearchRunStatus.PENDING,
-        model_provider=f"{settings.llm_provider}:{settings.llm_model}",
+    run = await create_research_run_with_basic_plan(
+        payload=payload.model_dump(),
+        db=db,
     )
-
-    db.add(run)
-    await db.commit()
-    await db.refresh(run)
 
     return run
 
