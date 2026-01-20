@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: inquiryos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${INQUIRYOS_DB_USER:-inquiryos}
+      POSTGRES_PASSWORD: ${INQUIRYOS_DB_PASSWORD:-inquiryos}
+      POSTGRES_DB: ${INQUIRYOS_DB_NAME:-inquiryos}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
