@@ -22,8 +22,59 @@ export interface ResearchRunRead {
     updated_at: string;
 }
 
+export type ResearchStepType =
+    | "planner"
+    | "searcher"
+    | "reader"
+    | "synthesizer";
+
+export interface ResearchStepRead {
+    id: string;
+    run_id: string;
+    step_index: number;
+    step_type: ResearchStepType;
+    input: Record<string, unknown> | null;
+    output: Record<string, unknown> | null;
+    created_at: string;
+}
+
+export interface ResearchRunDetail extends ResearchRunRead {
+    steps: ResearchStepRead[];
+}
+
 export async function createResearchRun(
     payload: ResearchRunCreate,
 ): Promise<ResearchRunRead> {
     return apiPost<ResearchRunCreate, ResearchRunRead>("/research-runs", payload);
 }
+
+export async function getResearchRunDetail(
+    runId: string,
+): Promise<ResearchRunDetail> {
+    const url = `/research-runs/${runId}/detail`;
+    const baseUrl =
+        import.meta.env.VITE_API_BASE_URL?.toString() ||
+        "http://localhost:8000/api/v1";
+
+    const res = await fetch(`${baseUrl}${url}`, {
+        method: "GET",
+    });
+
+    if (!res.ok) {
+        let message = `Request failed with status ${res.status}`;
+
+        try {
+            const data = await res.json();
+            if (data && typeof data.detail === "string") {
+                message = data.detail;
+            }
+        } catch {
+            // ignore JSON parse error
+        }
+
+        throw new Error(message);
+    }
+
+    return (await res.json()) as ResearchRunDetail;
+}
+

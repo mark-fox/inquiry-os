@@ -2,7 +2,8 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import {
     createResearchRun,
-    type ResearchRunRead,
+    getResearchRunDetail,
+    type ResearchRunDetail,
 } from "../../api/research";
 
 export function NewResearchRunForm() {
@@ -10,12 +11,11 @@ export function NewResearchRunForm() {
     const [query, setQuery] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [result, setResult] = useState<ResearchRunRead | null>(null);
+    const [detail, setDetail] = useState<ResearchRunDetail | null>(null);
 
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
 
-        // basic guard
         if (!query.trim()) {
             setError("Please enter a research question.");
             return;
@@ -23,7 +23,7 @@ export function NewResearchRunForm() {
 
         setIsSubmitting(true);
         setError(null);
-        setResult(null);
+        setDetail(null);
 
         try {
             const run = await createResearchRun({
@@ -31,7 +31,9 @@ export function NewResearchRunForm() {
                 title: title.trim() || null,
             });
 
-            setResult(run);
+            // Fetch the detail view so we can see planner steps
+            const fullDetail = await getResearchRunDetail(run.id);
+            setDetail(fullDetail);
         } catch (err) {
             const message =
                 err instanceof Error ? err.message : "Failed to create research run.";
@@ -101,16 +103,75 @@ export function NewResearchRunForm() {
                 </div>
             </form>
 
-            {result && (
-                <div className="mt-6 rounded-lg border border-app-border bg-app-bg/60 p-4">
-                    <h3 className="text-sm font-semibold">Created run</h3>
-                    <p className="mt-1 text-xs text-app-muted">
-                        This is the raw API response. Later we&apos;ll replace this with a
-                        nicer detail view.
-                    </p>
-                    <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-black/40 p-3 text-xs text-app-text">
-                        {JSON.stringify(result, null, 2)}
-                    </pre>
+            {detail && (
+                <div className="mt-6 space-y-4">
+                    <div className="rounded-lg border border-app-border bg-app-bg/60 p-4">
+                        <h3 className="text-sm font-semibold">
+                            Run created
+                        </h3>
+                        <p className="mt-1 text-xs text-app-muted">
+                            ID: <span className="font-mono">{detail.id}</span>
+                        </p>
+                        <p className="mt-1 text-xs text-app-muted">
+                            Status:{" "}
+                            <span className="font-semibold text-app-accent">
+                                {detail.status}
+                            </span>
+                        </p>
+                        <p className="mt-1 text-xs text-app-muted">
+                            Model: <span className="font-mono">{detail.model_provider}</span>
+                        </p>
+                    </div>
+
+                    <div className="rounded-lg border border-app-border bg-app-bg/60 p-4">
+                        <h3 className="text-sm font-semibold">
+                            Planner steps
+                        </h3>
+                        <p className="mt-1 text-xs text-app-muted">
+                            Showing the basic rule-based plan (no LLM yet).
+                        </p>
+
+                        {detail.steps.length === 0 ? (
+                            <p className="mt-3 text-sm text-app-muted">
+                                No steps recorded yet.
+                            </p>
+                        ) : (
+                            <ul className="mt-3 space-y-3">
+                                {detail.steps
+                                    .filter((step) => step.step_type === "planner")
+                                    .map((step) => {
+                                        const output = step.output ?? {};
+                                        const subquestions: unknown[] = Array.isArray(
+                                            (output as any).subquestions,
+                                        )
+                                            ? ((output as any).subquestions as unknown[])
+                                            : [];
+
+                                        return (
+                                            <li
+                                                key={step.id}
+                                                className="rounded-md border border-app-border bg-black/30 p-3"
+                                            >
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-app-muted">
+                                                    Planner step #{step.step_index}
+                                                </p>
+                                                {subquestions.length > 0 ? (
+                                                    <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
+                                                        {subquestions.map((sq: unknown, idx: number) => (
+                                                            <li key={idx}>{String(sq)}</li>
+                                                        ))}
+                                                    </ol>
+                                                ) : (
+                                                    <p className="mt-2 text-sm text-app-muted">
+                                                        No subquestions found in planner output.
+                                                    </p>
+                                                )}
+                                            </li>
+                                        );
+                                    })}
+                            </ul>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
