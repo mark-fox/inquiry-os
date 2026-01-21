@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from app.db.models.research_run import ResearchRunStatus
+from app.db.models.research_step import ResearchStepType
 
 
 class ResearchRunBase(BaseModel):
@@ -35,3 +36,26 @@ class ResearchRunRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ResearchStepRead(BaseModel):
+    id: UUID
+    run_id: UUID
+    step_index: int
+    step_type: ResearchStepType
+    input: dict | None
+    output: dict | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ResearchRunDetail(ResearchRunRead):
+    """
+    Detailed view of a research run, including its steps.
+
+    Later we can extend this with sources and answer once those agents
+    are implemented.
+    """
+
+    steps: list[ResearchStepRead] = []

@@ -2,12 +2,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, desc
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.models import ResearchRun, ResearchRunStatus
 from app.db.session import get_db
-from app.schemas.research_runs import ResearchRunCreate, ResearchRunRead
+from app.schemas.research_runs import (
+    ResearchRunCreate,
+    ResearchRunRead,
+    ResearchRunDetail,
+)
 from app.services.research_service import create_research_run_with_basic_plan
 
 router = APIRouter(
@@ -96,3 +101,39 @@ async def list_research_runs(
     runs = result.scalars().all()
 
     return list(runs)
+
+
+@router.get(
+    "/{run_id}/detail",
+    response_model=ResearchRunDetail,
+    status_code=status.HTTP_200_OK,
+)
+async def get_research_run_detail(
+    run_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ResearchRunDetail:
+    """
+    Detailed view of a research run, including its steps.
+
+    For now this returns all steps associated with the run (e.g. the
+    initial planner step). Later we will extend this with sources and
+    the final synthesized answer.
+    """
+    stmt = (
+        select(ResearchRun)
+        .options(
+            selectinload(ResearchRun.steps),
+        )
+        .where(ResearchRun.id == run_id)
+    )
+
+    result = await db.execute(stmt)
+    run = result.scalar_one_or_none()
+
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Research run not found",
+        )
+
+    return run
