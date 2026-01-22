@@ -1,5 +1,6 @@
 import { Shell } from "./components/layout/Shell";
 import { NewResearchRunForm } from "./components/research/NewResearchRunForm";
+import { RecentRunsPanel } from "./components/research/RecentRunsPanel";
 
 function App() {
   return (
@@ -14,8 +15,13 @@ function App() {
         </p>
       </header>
 
-      <main>
-        <NewResearchRunForm />
+      <main className="grid gap-6 lg:grid-cols-[2fr,1.2fr]">
+        <section>
+          <NewResearchRunForm />
+        </section>
+        <section>
+          <RecentRunsPanel />
+        </section>
       </main>
     </Shell>
   );
