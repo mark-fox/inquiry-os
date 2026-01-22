@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from uuid import UUID
 
@@ -50,12 +52,27 @@ class ResearchStepRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SourceRead(BaseModel):
+    id: UUID
+    run_id: UUID
+    url: str
+    title: str
+    raw_content: str | None
+    summary: str | None
+    relevance_score: float | None
+    extra_metadata: dict | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ResearchRunDetail(ResearchRunRead):
     """
-    Detailed view of a research run, including its steps.
+    Detailed view of a research run, including its steps and sources.
 
-    Later we can extend this with sources and answer once those agents
-    are implemented.
+    Later we can extend this further with the final synthesized answer
+    once the synthesizer agent is implemented.
     """
 
     steps: list[ResearchStepRead] = []
+    sources: list[SourceRead] = []

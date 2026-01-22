@@ -113,16 +113,16 @@ async def get_research_run_detail(
     db: AsyncSession = Depends(get_db),
 ) -> ResearchRunDetail:
     """
-    Detailed view of a research run, including its steps.
+    Detailed view of a research run, including its steps and sources.
 
-    For now this returns all steps associated with the run (e.g. the
-    initial planner step). Later we will extend this with sources and
-    the final synthesized answer.
+    For now this returns all steps and sources associated with the run.
+    Later we will extend this with the final synthesized answer.
     """
     stmt = (
         select(ResearchRun)
         .options(
             selectinload(ResearchRun.steps),
+            selectinload(ResearchRun.sources),
         )
         .where(ResearchRun.id == run_id)
     )
