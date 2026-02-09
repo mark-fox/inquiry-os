@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 from typing import Any
-
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -10,6 +10,7 @@ from app.db.models import (
     ResearchRunStatus,
     ResearchStep,
     ResearchStepType,
+    Source
 )
 
 
@@ -117,6 +118,80 @@ async def create_research_run_with_basic_plan(
     )
 
     db.add(step)
+    await db.commit()
+    await db.refresh(run)
+
+    return run
+
+
+async def run_dummy_search_for_run(
+    run_id: UUID,
+    db: AsyncSession,
+) -> ResearchRun:
+    """
+    Dummy 'searcher' agent that attaches a simple search step and a few
+    fake sources to an existing research run.
+
+    This does NOT perform real web search. It just creates plausible
+    Source rows so we can exercise the data model and UI. Later we will
+    replace this with a real web search + fetch pipeline.
+    """
+    # Load the run first
+    run = await db.get(ResearchRun, run_id)
+    if run is None:
+        raise ValueError("Research run not found")
+
+    query = run.query
+
+    # In the future we might compute step_index dynamically from the
+    # current max for this run. For now we assume planner is at 0 and
+    # this is the next step.
+    search_step = ResearchStep(
+        run_id=run.id,
+        step_index=1,
+        step_type=ResearchStepType.SEARCHER,
+        input={"query": query},
+        output={
+            "notes": "Dummy searcher v0 – no real web search performed.",
+            "hint": "Later this will hit a search API and populate real sources.",
+        },
+    )
+    db.add(search_step)
+
+    # Create a few fake sources based on the query
+    base_slug = query.lower().replace(" ", "-")[:50] or "research-topic"
+
+    sources = [
+        Source(
+            run_id=run.id,
+            url=f"https://example.com/articles/{base_slug}-overview",
+            title="High-level overview related to your research question",
+            raw_content=None,
+            summary="Overview article (dummy source for dev/testing).",
+            relevance_score=0.9,
+            extra_metadata={"source_type": "overview", "dummy": True},
+        ),
+        Source(
+            run_id=run.id,
+            url=f"https://example.com/blog/{base_slug}-tradeoffs",
+            title="Discussion of tradeoffs and practical considerations",
+            raw_content=None,
+            summary="Tradeoffs and pros/cons (dummy source for dev/testing).",
+            relevance_score=0.8,
+            extra_metadata={"source_type": "discussion", "dummy": True},
+        ),
+        Source(
+            run_id=run.id,
+            url=f"https://example.com/docs/{base_slug}-reference",
+            title="Reference documentation or spec-style material",
+            raw_content=None,
+            summary="Reference-style material (dummy source for dev/testing).",
+            relevance_score=0.75,
+            extra_metadata={"source_type": "reference", "dummy": True},
+        ),
+    ]
+
+    db.add_all(sources)
     await db.commit()
     await db.refresh(run)
 

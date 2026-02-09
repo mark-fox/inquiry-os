@@ -13,7 +13,10 @@ from app.schemas.research_runs import (
     ResearchRunRead,
     ResearchRunDetail,
 )
-from app.services.research_service import create_research_run_with_basic_plan
+from app.services.research_service import (
+    create_research_run_with_basic_plan,
+    run_dummy_search_for_run,
+)
 
 router = APIRouter(
     prefix="/research-runs",
@@ -131,6 +134,53 @@ async def get_research_run_detail(
     run = result.scalar_one_or_none()
 
     if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Research run not found",
+        )
+
+    return run
+
+
+@router.post(
+    "/{run_id}/search-dummy",
+    response_model=ResearchRunDetail,
+    status_code=status.HTTP_200_OK,
+)
+async def run_dummy_search(
+    run_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ResearchRunDetail:
+    """
+    Attach a dummy search step and a few fake sources to the given run.
+
+    This is a development-only endpoint that does not perform real web
+    search. It is intended to exercise the data model and UI before we
+    integrate a real searcher + reader pipeline.
+    """
+    try:
+        await run_dummy_search_for_run(run_id=run_id, db=db)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Research run not found",
+        )
+
+    # Return the updated detail view with steps and sources
+    stmt = (
+        select(ResearchRun)
+        .options(
+            selectinload(ResearchRun.steps),
+            selectinload(ResearchRun.sources),
+        )
+        .where(ResearchRun.id == run_id)
+    )
+
+    result = await db.execute(stmt)
+    run = result.scalar_one_or_none()
+
+    if run is None:
+        # Very unlikely at this point, but keep the contract consistent.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Research run not found",
