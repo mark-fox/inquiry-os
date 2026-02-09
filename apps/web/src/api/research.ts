@@ -38,8 +38,21 @@ export interface ResearchStepRead {
     created_at: string;
 }
 
+export interface SourceRead {
+    id: string;
+    run_id: string;
+    url: string;
+    title: string;
+    raw_content: string | null;
+    summary: string | null;
+    relevance_score: number | null;
+    extra_metadata: Record<string, unknown> | null;
+    created_at: string;
+}
+
 export interface ResearchRunDetail extends ResearchRunRead {
     steps: ResearchStepRead[];
+    sources: SourceRead[];
 }
 
 export async function createResearchRun(
@@ -109,4 +122,36 @@ export async function listResearchRuns(
     }
 
     return (await res.json()) as ResearchRunRead[];
+}
+
+
+export async function runDummySearch(
+    runId: string,
+): Promise<ResearchRunDetail> {
+    const baseUrl =
+        import.meta.env.VITE_API_BASE_URL?.toString() ||
+        "http://localhost:8000/api/v1";
+
+    const url = `${baseUrl}/research-runs/${runId}/search-dummy`;
+
+    const res = await fetch(url, {
+        method: "POST",
+    });
+
+    if (!res.ok) {
+        let message = `Request failed with status ${res.status}`;
+
+        try {
+            const data = await res.json();
+            if (data && typeof data.detail === "string") {
+                message = data.detail;
+            }
+        } catch {
+            // ignore JSON parse error
+        }
+
+        throw new Error(message);
+    }
+
+    return (await res.json()) as ResearchRunDetail;
 }

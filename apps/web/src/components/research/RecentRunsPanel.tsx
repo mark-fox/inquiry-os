@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import type { ResearchRunRead, ResearchRunDetail } from "../../api/research";
-import { listResearchRuns, getResearchRunDetail } from "../../api/research";
+import {
+    listResearchRuns,
+    getResearchRunDetail,
+    runDummySearch,
+} from "../../api/research";
 
 function formatDate(value: string): string {
     const date = new Date(value);
@@ -17,6 +21,7 @@ export function RecentRunsPanel() {
     );
     const [isDetailLoading, setIsDetailLoading] = useState(false);
     const [detailError, setDetailError] = useState<string | null>(null);
+    const [isSearchRunning, setIsSearchRunning] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -63,6 +68,33 @@ export function RecentRunsPanel() {
             setDetailError(message);
         } finally {
             setIsDetailLoading(false);
+        }
+    }
+
+
+    async function handleRunDummySearch() {
+        if (!selectedDetail) return;
+
+        setIsSearchRunning(true);
+        setDetailError(null);
+
+        try {
+            const updated = await runDummySearch(selectedDetail.id);
+            setSelectedDetail(updated);
+
+            // Optional: refresh the list so status / timestamps stay in sync
+            try {
+                const refreshedRuns = await listResearchRuns(10, 0);
+                setRuns(refreshedRuns);
+            } catch {
+                // if this fails, it's non-fatal for now
+            }
+        } catch (err) {
+            const message =
+                err instanceof Error ? err.message : "Failed to run dummy search.";
+            setDetailError(message);
+        } finally {
+            setIsSearchRunning(false);
         }
     }
 
@@ -143,6 +175,15 @@ export function RecentRunsPanel() {
                         <span className="font-mono">{selectedDetail.model_provider}</span>
                     </p>
 
+                    <button
+                        type="button"
+                        onClick={handleRunDummySearch}
+                        disabled={isSearchRunning}
+                        className="mt-2 inline-flex items-center rounded-md bg-app-accent px-2.5 py-1 text-[11px] font-medium text-app-bg transition hover:bg-app-accentSoft disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {isSearchRunning ? "Running dummy search…" : "Run dummy search"}
+                    </button>
+
                     {/* Planner steps */}
                     <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
                         <p className="text-[11px] font-semibold">
@@ -192,6 +233,51 @@ export function RecentRunsPanel() {
                                             </li>
                                         );
                                     })}
+                            </ul>
+                        )}
+                    </div>
+
+                    {/* Sources */}
+                    <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
+                        <p className="text-[11px] font-semibold">
+                            Sources (dummy)
+                        </p>
+                        <p className="mt-1 text-[10px] text-app-muted">
+                            These are placeholder sources from the dummy searcher agent. Real
+                            web search will replace this later.
+                        </p>
+
+                        {selectedDetail.sources.length === 0 ? (
+                            <p className="mt-2 text-[11px] text-app-muted">
+                                No sources attached yet. Run the dummy search to create some.
+                            </p>
+                        ) : (
+                            <ul className="mt-2 space-y-2">
+                                {selectedDetail.sources.map((source) => (
+                                    <li
+                                        key={source.id}
+                                        className="rounded-md border border-app-border bg-black/50 p-2"
+                                    >
+                                        <a
+                                            href={source.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-[11px] font-semibold text-app-accent hover:underline"
+                                        >
+                                            {source.title || source.url}
+                                        </a>
+                                        <p className="mt-1 text-[10px] text-app-muted">
+                                            {source.summary ||
+                                                "No summary available (dummy source placeholder)."}
+                                        </p>
+                                        <p className="mt-1 text-[10px] text-app-muted">
+                                            Relevance:{" "}
+                                            <span className="font-mono">
+                                                {source.relevance_score ?? "n/a"}
+                                            </span>
+                                        </p>
+                                    </li>
+                                ))}
                             </ul>
                         )}
                     </div>
