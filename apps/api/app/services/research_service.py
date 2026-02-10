@@ -1,6 +1,8 @@
 from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -70,6 +72,24 @@ async def _generate_planner_output(
             **base,
             "llm_error": str(exc),
         }
+
+
+async def _next_step_index_for_run(
+    run_id: UUID,
+    db: AsyncSession,
+) -> int:
+    """
+    Compute the next step_index for a given run by looking at existing steps.
+
+    If there are no steps yet, this returns 0.
+    """
+    result = await db.execute(
+        select(ResearchStep.step_index).where(ResearchStep.run_id == run_id)
+    )
+    indices = list(result.scalars().all())
+    if not indices:
+        return 0
+    return max(indices) + 1
 
 
 async def create_research_run_with_basic_plan(
@@ -192,6 +212,77 @@ async def run_dummy_search_for_run(
     ]
 
     db.add_all(sources)
+    await db.commit()
+    await db.refresh(run)
+
+    return run
+
+
+async def run_dummy_synthesis_for_run(
+    run_id: UUID,
+    db: AsyncSession,
+) -> ResearchRun:
+    """
+    Dummy 'synthesizer' agent that looks at the run's sources and creates
+    a synthesizer step with a simple, human-readable answer.
+
+    This does NOT call a real LLM yet. It just stitches together a
+    placeholder answer so we can exercise the data model and UI. Later
+    we can replace the answer generation with an LLM-backed call.
+    """
+    # Load the run
+    run = await db.get(ResearchRun, run_id)
+    if run is None:
+        raise ValueError("Research run not found")
+
+    # Fetch sources for this run
+    result = await db.execute(select(Source).where(Source.run_id == run_id))
+    sources = list(result.scalars().all())
+
+    # Build a simple answer text using the run query and sources
+    if not sources:
+        answer_text = (
+            "No sources are currently attached to this research run. "
+            "Run the searcher agent first to collect relevant sources."
+        )
+    else:
+        lines: list[str] = []
+        lines.append(
+            "This is a dummy synthesized answer based on the attached sources."
+        )
+        lines.append("")
+        lines.append(f"Research question: {run.query}")
+        lines.append("")
+        lines.append("The system considered the following sources:")
+        for idx, src in enumerate(sources, start=1):
+            title = src.title or src.url
+            lines.append(f"{idx}. {title} — {src.url}")
+
+        lines.append("")
+        lines.append(
+            "A proper LLM-backed synthesizer will later read and compare these "
+            "sources in detail to produce a nuanced, citation-rich answer."
+        )
+
+        answer_text = "\n".join(lines)
+
+    step_index = await _next_step_index_for_run(run_id=run_id, db=db)
+
+    synth_step = ResearchStep(
+        run_id=run.id,
+        step_index=step_index,
+        step_type=ResearchStepType.SYNTHESIZER,
+        input={
+            "source_ids": [str(s.id) for s in sources],
+        },
+        output={
+            "answer": answer_text,
+            "notes": "Dummy synthesizer v0 – no real LLM call performed.",
+            "source_count": len(sources),
+        },
+    )
+
+    db.add(synth_step)
     await db.commit()
     await db.refresh(run)
 

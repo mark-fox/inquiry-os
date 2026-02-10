@@ -16,6 +16,7 @@ from app.schemas.research_runs import (
 from app.services.research_service import (
     create_research_run_with_basic_plan,
     run_dummy_search_for_run,
+    run_dummy_synthesis_for_run,
 )
 
 router = APIRouter(
@@ -160,6 +161,54 @@ async def run_dummy_search(
     """
     try:
         await run_dummy_search_for_run(run_id=run_id, db=db)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Research run not found",
+        )
+
+    # Return the updated detail view with steps and sources
+    stmt = (
+        select(ResearchRun)
+        .options(
+            selectinload(ResearchRun.steps),
+            selectinload(ResearchRun.sources),
+        )
+        .where(ResearchRun.id == run_id)
+    )
+
+    result = await db.execute(stmt)
+    run = result.scalar_one_or_none()
+
+    if run is None:
+        # Very unlikely at this point, but keep the contract consistent.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Research run not found",
+        )
+
+    return run
+
+
+@router.post(
+    "/{run_id}/synthesize-dummy",
+    response_model=ResearchRunDetail,
+    status_code=status.HTTP_200_OK,
+)
+async def run_dummy_synthesis(
+    run_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ResearchRunDetail:
+    """
+    Attach a dummy synthesizer step to the given run.
+
+    This endpoint does not call a real LLM yet; it creates a simple
+    synthesized answer based on the run's attached sources. It is
+    intended for development and UI wiring prior to integrating a
+    real LLM-backed synthesizer.
+    """
+    try:
+        await run_dummy_synthesis_for_run(run_id=run_id, db=db)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
