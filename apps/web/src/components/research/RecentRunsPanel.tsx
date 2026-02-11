@@ -143,6 +143,25 @@ export function RecentRunsPanel() {
     }
 
 
+    function getStepPresence(detail: ResearchRunDetail | null) {
+        if (!detail) {
+            return {
+                hasPlanner: false,
+                hasSearcher: false,
+                hasSynthesizer: false,
+            };
+        }
+
+        const hasPlanner = detail.steps.some((s) => s.step_type === "planner");
+        const hasSearcher = detail.steps.some((s) => s.step_type === "searcher");
+        const hasSynthesizer = detail.steps.some(
+            (s) => s.step_type === "synthesizer",
+        );
+
+        return { hasPlanner, hasSearcher, hasSynthesizer };
+    }
+
+
     return (
         <aside className="rounded-xl border border-app-border bg-app-surface p-4 shadow-soft">
             <h2 className="text-sm font-semibold">Recent runs</h2>
@@ -239,6 +258,42 @@ export function RecentRunsPanel() {
                             ? "Generating dummy answer…"
                             : "Generate dummy answer"}
                     </button>
+
+                    {/* Pipeline status */}
+                    {(() => {
+                        const pipeline = getStepPresence(selectedDetail);
+
+                        return (
+                            <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
+                                <p className="text-[11px] font-semibold">
+                                    Pipeline status
+                                </p>
+                                <p className="mt-1 text-[10px] text-app-muted">
+                                    Which agents have been run for this research question.
+                                </p>
+                                <ul className="mt-2 space-y-1 text-[11px]">
+                                    <li>
+                                        <span className="font-semibold">Planner:</span>{" "}
+                                        <span className="text-app-muted">
+                                            {pipeline.hasPlanner ? "done" : "not run yet"}
+                                        </span>
+                                    </li>
+                                    <li>
+                                        <span className="font-semibold">Searcher:</span>{" "}
+                                        <span className="text-app-muted">
+                                            {pipeline.hasSearcher ? "done" : "not run yet"}
+                                        </span>
+                                    </li>
+                                    <li>
+                                        <span className="font-semibold">Synthesizer:</span>{" "}
+                                        <span className="text-app-muted">
+                                            {pipeline.hasSynthesizer ? "done" : "not run yet"}
+                                        </span>
+                                    </li>
+                                </ul>
+                            </div>
+                        );
+                    })()}
 
                     {/* Planner steps */}
                     <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
