@@ -4,6 +4,7 @@ import {
     listResearchRuns,
     getResearchRunDetail,
     runDummySearch,
+    runDummySynthesis,
 } from "../../api/research";
 
 function formatDate(value: string): string {
@@ -22,6 +23,7 @@ export function RecentRunsPanel() {
     const [isDetailLoading, setIsDetailLoading] = useState(false);
     const [detailError, setDetailError] = useState<string | null>(null);
     const [isSearchRunning, setIsSearchRunning] = useState(false);
+    const [isSynthesisRunning, setIsSynthesisRunning] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -97,6 +99,49 @@ export function RecentRunsPanel() {
             setIsSearchRunning(false);
         }
     }
+
+
+    function getSynthAnswer(detail: ResearchRunDetail | null): string | null {
+        if (!detail) return null;
+
+        const step = detail.steps.find(
+            (s) => s.step_type === "synthesizer",
+        );
+        if (!step || !step.output) return null;
+
+        const out = step.output as Record<string, unknown>;
+        const value = out["answer"];
+
+        return typeof value === "string" ? value : null;
+    }
+
+
+    async function handleRunDummySynthesis() {
+        if (!selectedDetail) return;
+
+        setIsSynthesisRunning(true);
+        setDetailError(null);
+
+        try {
+            const updated = await runDummySynthesis(selectedDetail.id);
+            setSelectedDetail(updated);
+
+            // Optional: refresh the run list so you see updated status if it changes
+            try {
+                const refreshedRuns = await listResearchRuns(10, 0);
+                setRuns(refreshedRuns);
+            } catch {
+                // non-fatal
+            }
+        } catch (err) {
+            const message =
+                err instanceof Error ? err.message : "Failed to run dummy synthesis.";
+            setDetailError(message);
+        } finally {
+            setIsSynthesisRunning(false);
+        }
+    }
+
 
     return (
         <aside className="rounded-xl border border-app-border bg-app-surface p-4 shadow-soft">
@@ -182,6 +227,17 @@ export function RecentRunsPanel() {
                         className="mt-2 inline-flex items-center rounded-md bg-app-accent px-2.5 py-1 text-[11px] font-medium text-app-bg transition hover:bg-app-accentSoft disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         {isSearchRunning ? "Running dummy search…" : "Run dummy search"}
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleRunDummySynthesis}
+                        disabled={isSynthesisRunning}
+                        className="inline-flex items-center rounded-md bg-app-accentSoft px-2.5 py-1 text-[11px] font-medium text-app-text transition hover:bg-app-accent/80 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {isSynthesisRunning
+                            ? "Generating dummy answer…"
+                            : "Generate dummy answer"}
                     </button>
 
                     {/* Planner steps */}
@@ -280,6 +336,41 @@ export function RecentRunsPanel() {
                                 ))}
                             </ul>
                         )}
+                    </div>
+
+                    {/* Answer */}
+                    <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
+                        <p className="text-[11px] font-semibold">
+                            Answer (dummy)
+                        </p>
+                        <p className="mt-1 text-[10px] text-app-muted">
+                            This synthesized answer is produced by the dummy synthesizer
+                            agent. Later this will be powered by a real LLM and include
+                            citations and deeper comparison.
+                        </p>
+
+                        {isSynthesisRunning && (
+                            <p className="mt-2 text-[11px] text-app-muted">
+                                Generating answer…
+                            </p>
+                        )}
+
+                        {!isSynthesisRunning && (() => {
+                            const answer = getSynthAnswer(selectedDetail);
+                            if (!answer) {
+                                return (
+                                    <p className="mt-2 text-[11px] text-app-muted">
+                                        No answer yet. Run the dummy synthesis to generate one.
+                                    </p>
+                                );
+                            }
+
+                            return (
+                                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-black/60 p-2 text-[11px] text-app-text">
+                                    {answer}
+                                </pre>
+                            );
+                        })()}
                     </div>
                 </div>
             )}

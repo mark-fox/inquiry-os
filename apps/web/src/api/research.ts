@@ -155,3 +155,35 @@ export async function runDummySearch(
 
     return (await res.json()) as ResearchRunDetail;
 }
+
+
+export async function runDummySynthesis(
+  runId: string,
+): Promise<ResearchRunDetail> {
+  const baseUrl =
+    import.meta.env.VITE_API_BASE_URL?.toString() ||
+    "http://localhost:8000/api/v1";
+
+  const url = `${baseUrl}/research-runs/${runId}/synthesize-dummy`;
+
+  const res = await fetch(url, {
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    let message = `Request failed with status ${res.status}`;
+
+    try {
+      const data = await res.json();
+      if (data && typeof data.detail === "string") {
+        message = data.detail;
+      }
+    } catch {
+      // ignore JSON parse error
+    }
+
+    throw new Error(message);
+  }
+
+  return (await res.json()) as ResearchRunDetail;
+}
