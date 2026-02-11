@@ -5,8 +5,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
-from app.db.models import ResearchRun, ResearchRunStatus
+from app.db.models import ResearchRun
 from app.db.session import get_db
 from app.schemas.research_runs import (
     ResearchRunCreate,
@@ -15,8 +14,12 @@ from app.schemas.research_runs import (
 )
 from app.services.research_service import (
     create_research_run_with_basic_plan,
-    run_dummy_search_for_run,
-    run_dummy_synthesis_for_run,
+)
+
+from app.services.pipeline_orchestrator import (
+    PipelineOrchestrator,
+    RunNotFoundError,
+    InvalidPipelineStateError,
 )
 
 router = APIRouter(
@@ -34,18 +37,10 @@ async def create_research_run(
     payload: ResearchRunCreate,
     db: AsyncSession = Depends(get_db),
 ) -> ResearchRunRead:
-    """
-    Create a new research run with an initial planner step.
-
-    The planner is currently a simple rule-based function that generates
-    generic sub-questions. Later this will be replaced with an LLM-backed
-    planner agent and a more complete orchestration pipeline.
-    """
     run = await create_research_run_with_basic_plan(
         payload=payload.model_dump(),
         db=db,
     )
-
     return run
 
 
@@ -58,12 +53,6 @@ async def get_research_run(
     run_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> ResearchRunRead:
-    """
-    Fetch a single research run by its ID.
-
-    For now this returns only the core run fields. In a later step we'll add
-    a 'detail' schema that includes steps, sources, and answer.
-    """
     result = await db.execute(
         select(ResearchRun).where(ResearchRun.id == run_id)
     )
@@ -88,12 +77,6 @@ async def list_research_runs(
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ) -> list[ResearchRunRead]:
-    """
-    List research runs, newest first.
-
-    For now this is a simple cursor with limit/offset.
-    We'll refine filtering and pagination later if needed.
-    """
     stmt = (
         select(ResearchRun)
         .order_by(desc(ResearchRun.created_at))
@@ -116,25 +99,11 @@ async def get_research_run_detail(
     run_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> ResearchRunDetail:
-    """
-    Detailed view of a research run, including its steps and sources.
+    orchestrator = PipelineOrchestrator(db=db)
 
-    For now this returns all steps and sources associated with the run.
-    Later we will extend this with the final synthesized answer.
-    """
-    stmt = (
-        select(ResearchRun)
-        .options(
-            selectinload(ResearchRun.steps),
-            selectinload(ResearchRun.sources),
-        )
-        .where(ResearchRun.id == run_id)
-    )
-
-    result = await db.execute(stmt)
-    run = result.scalar_one_or_none()
-
-    if run is None:
+    try:
+        run = await orchestrator.get_run_detail(run_id)
+    except RunNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Research run not found",
@@ -152,39 +121,20 @@ async def run_dummy_search(
     run_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> ResearchRunDetail:
-    """
-    Attach a dummy search step and a few fake sources to the given run.
+    orchestrator = PipelineOrchestrator(db=db)
 
-    This is a development-only endpoint that does not perform real web
-    search. It is intended to exercise the data model and UI before we
-    integrate a real searcher + reader pipeline.
-    """
     try:
-        await run_dummy_search_for_run(run_id=run_id, db=db)
-    except ValueError:
+        await orchestrator.run_dummy_search(run_id)
+        run = await orchestrator.get_run_detail(run_id)
+    except RunNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Research run not found",
         )
-
-    # Return the updated detail view with steps and sources
-    stmt = (
-        select(ResearchRun)
-        .options(
-            selectinload(ResearchRun.steps),
-            selectinload(ResearchRun.sources),
-        )
-        .where(ResearchRun.id == run_id)
-    )
-
-    result = await db.execute(stmt)
-    run = result.scalar_one_or_none()
-
-    if run is None:
-        # Very unlikely at this point, but keep the contract consistent.
+    except InvalidPipelineStateError as exc:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Research run not found",
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
         )
 
     return run
@@ -199,40 +149,20 @@ async def run_dummy_synthesis(
     run_id: UUID,
     db: AsyncSession = Depends(get_db),
 ) -> ResearchRunDetail:
-    """
-    Attach a dummy synthesizer step to the given run.
+    orchestrator = PipelineOrchestrator(db=db)
 
-    This endpoint does not call a real LLM yet; it creates a simple
-    synthesized answer based on the run's attached sources. It is
-    intended for development and UI wiring prior to integrating a
-    real LLM-backed synthesizer.
-    """
     try:
-        await run_dummy_synthesis_for_run(run_id=run_id, db=db)
-    except ValueError:
+        await orchestrator.run_dummy_synthesis(run_id)
+        run = await orchestrator.get_run_detail(run_id)
+    except RunNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Research run not found",
         )
-
-    # Return the updated detail view with steps and sources
-    stmt = (
-        select(ResearchRun)
-        .options(
-            selectinload(ResearchRun.steps),
-            selectinload(ResearchRun.sources),
-        )
-        .where(ResearchRun.id == run_id)
-    )
-
-    result = await db.execute(stmt)
-    run = result.scalar_one_or_none()
-
-    if run is None:
-        # Very unlikely at this point, but keep the contract consistent.
+    except InvalidPipelineStateError as exc:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Research run not found",
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
         )
 
     return run
