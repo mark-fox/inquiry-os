@@ -14,7 +14,6 @@ from app.db.models import (
     ResearchStepType,
     Source,
 )
-from app.db.models import Answer
 
 
 class RunNotFoundError(Exception):
@@ -70,6 +69,13 @@ class PipelineOrchestrator:
     async def _set_status_completed(self, run: ResearchRun) -> None:
         run.status = ResearchRunStatus.COMPLETED
 
+    async def _next_step_index(self, run_id: UUID) -> int:
+        result = await self.db.execute(
+            select(ResearchStep.step_index).where(ResearchStep.run_id == run_id)
+        )
+        indices = list(result.scalars().all())
+        return (max(indices) + 1) if indices else 0
+    
     async def run_dummy_search(self, run_id: UUID) -> ResearchRun:
         """
         Orchestrated dummy search:
@@ -94,9 +100,11 @@ class PipelineOrchestrator:
         # --- Existing dummy behavior (inline, intentionally small) ---
         query = run.query
 
+        next_index = await self._next_step_index(run_id)
+
         search_step = ResearchStep(
             run_id=run.id,
-            step_index=1,
+            step_index=next_index,
             step_type=ResearchStepType.SEARCHER,
             input={"query": query},
             output={
@@ -190,12 +198,7 @@ class PipelineOrchestrator:
             )
             answer_text = "\n".join(lines)
 
-        # Compute next step_index safely (no assumptions)
-        result = await self.db.execute(
-            select(ResearchStep.step_index).where(ResearchStep.run_id == run_id)
-        )
-        indices = list(result.scalars().all())
-        next_index = (max(indices) + 1) if indices else 0
+        next_index = await self._next_step_index(run_id)
 
         synth_step = ResearchStep(
             run_id=run.id,

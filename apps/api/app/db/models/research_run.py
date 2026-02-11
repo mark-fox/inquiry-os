@@ -59,6 +59,7 @@ class ResearchRun(Base):
     steps: Mapped[list["ResearchStep"]] = relationship(
         back_populates="run",
         cascade="all, delete-orphan",
+        order_by="ResearchStep.step_index",
     )
 
     sources: Mapped[list["Source"]] = relationship(
