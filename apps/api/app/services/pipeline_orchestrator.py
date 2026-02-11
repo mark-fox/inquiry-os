@@ -14,14 +14,7 @@ from app.db.models import (
     ResearchStepType,
     Source,
 )
-
-# If your Answer model is available via app.db.models, we can eager load it too.
-# If not, leave it out — the rest still works.
-try:
-    from app.db.models import Answer  # noqa: F401
-    _HAS_ANSWER = True
-except Exception:  # noqa: BLE001
-    _HAS_ANSWER = False
+from app.db.models import Answer
 
 
 class RunNotFoundError(Exception):
@@ -44,18 +37,15 @@ class PipelineOrchestrator:
 
     async def get_run_detail(self, run_id: UUID) -> ResearchRun:
         """
-        Canonical detail loader: run + steps + sources (+ answer if available).
+        Canonical detail loader: run + steps + sources + answer.
         """
-        options = [
-            selectinload(ResearchRun.steps),
-            selectinload(ResearchRun.sources),
-        ]
-        if _HAS_ANSWER:
-            options.append(selectinload(ResearchRun.answer))
-
         stmt = (
             select(ResearchRun)
-            .options(*options)
+            .options(
+                selectinload(ResearchRun.steps),
+                selectinload(ResearchRun.sources),
+                selectinload(ResearchRun.answer),
+            )
             .where(ResearchRun.id == run_id)
         )
 
