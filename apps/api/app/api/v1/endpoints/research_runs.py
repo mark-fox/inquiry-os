@@ -193,3 +193,28 @@ async def execute_dummy_pipeline(
         )
 
     return run
+
+
+@router.post(
+    "/{run_id}/search",
+    response_model=ResearchRunDetail,
+    status_code=status.HTTP_200_OK,
+)
+async def run_web_search(
+    run_id: UUID,
+    limit: int = 5,
+    db: AsyncSession = Depends(get_db),
+) -> ResearchRunDetail:
+    orchestrator = PipelineOrchestrator(db=db)
+
+    try:
+        await orchestrator.run_web_search(run_id, limit=limit)
+        run = await orchestrator.get_run_detail(run_id)
+    except RunNotFoundError:
+        raise HTTPException(status_code=404, detail="Research run not found")
+    except InvalidPipelineStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=502, detail="Search provider failed")
+
+    return run

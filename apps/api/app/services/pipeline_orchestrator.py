@@ -17,6 +17,7 @@ from app.db.models import (
 )
 from datetime import datetime, timezone
 from app.db.models import ResearchStepStatus
+from app.services.search_clients.duckduckgo_client import DuckDuckGoClient
 
 class RunNotFoundError(Exception):
     pass
@@ -291,6 +292,57 @@ class PipelineOrchestrator:
         )
 
         self.db.add(reader_step)
+
+        await self.db.commit()
+        await self.db.refresh(run)
+        return run
+    
+    async def run_web_search(self, run_id: UUID, limit: int = 5) -> ResearchRun:
+        run = await self.db.get(ResearchRun, run_id)
+        if run is None:
+            raise RunNotFoundError("Research run not found")
+
+        already_searched = await self._has_step_type(run_id, ResearchStepType.SEARCHER)
+        if already_searched:
+            raise InvalidPipelineStateError("Search has already been run for this research run.")
+
+        has_planner = await self._has_step_type(run_id, ResearchStepType.PLANNER)
+        if not has_planner:
+            raise InvalidPipelineStateError("Planner step missing; cannot run search.")
+
+        client = DuckDuckGoClient()
+        results = await client.search(run.query, limit=limit)
+
+        now = datetime.now(timezone.utc)
+        next_index = await self._next_step_index(run_id)
+
+        step = ResearchStep(
+            run_id=run.id,
+            step_index=next_index,
+            step_type=ResearchStepType.SEARCHER,
+            status=ResearchStepStatus.COMPLETED,
+            started_at=now,
+            completed_at=now,
+            input={"query": run.query, "limit": limit},
+            output={"result_count": len(results), "provider": "duckduckgo_html"},
+        )
+        self.db.add(step)
+
+        sources = [
+            Source(
+                run_id=run.id,
+                url=r.url,
+                title=r.title,
+                raw_content=None,
+                summary=None,
+                relevance_score=None,
+                extra_metadata={"provider": "duckduckgo_html"},
+            )
+            for r in results
+        ]
+        self.db.add_all(sources)
+
+        await self._set_status_running_if_pending(run)
 
         await self.db.commit()
         await self.db.refresh(run)
