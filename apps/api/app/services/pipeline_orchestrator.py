@@ -230,3 +230,16 @@ class PipelineOrchestrator:
         await self.db.commit()
         await self.db.refresh(run)
         return run
+    
+    async def execute_dummy_pipeline(self, run_id: UUID) -> ResearchRun:
+        run = await self.get_run_detail(run_id)
+
+        has_search = await self._has_step_type(run_id, ResearchStepType.SEARCHER)
+        if not has_search:
+            await self.run_dummy_search(run_id)
+
+        has_synth = await self._has_step_type(run_id, ResearchStepType.SYNTHESIZER)
+        if not has_synth:
+            await self.run_dummy_synthesis(run_id)
+
+        return await self.get_run_detail(run_id)
