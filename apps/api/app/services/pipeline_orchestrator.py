@@ -175,9 +175,9 @@ class PipelineOrchestrator:
         if already_synthesized:
             raise InvalidPipelineStateError("Synthesis has already been run for this research run.")
 
-        has_search = await self._has_step_type(run_id, ResearchStepType.SEARCHER)
-        if not has_search:
-            raise InvalidPipelineStateError("Run search before synthesis.")
+        has_reader = await self._has_step_type(run_id, ResearchStepType.READER)
+        if not has_reader:
+            raise InvalidPipelineStateError("Run reader before synthesis.")
 
         # Load sources
         result = await self.db.execute(select(Source).where(Source.run_id == run_id))
@@ -234,12 +234,64 @@ class PipelineOrchestrator:
     async def execute_dummy_pipeline(self, run_id: UUID) -> ResearchRun:
         run = await self.get_run_detail(run_id)
 
-        has_search = await self._has_step_type(run_id, ResearchStepType.SEARCHER)
-        if not has_search:
+        if not await self._has_step_type(run_id, ResearchStepType.SEARCHER):
             await self.run_dummy_search(run_id)
 
-        has_synth = await self._has_step_type(run_id, ResearchStepType.SYNTHESIZER)
-        if not has_synth:
+        if not await self._has_step_type(run_id, ResearchStepType.READER):
+            await self.run_dummy_reader(run_id)
+
+        if not await self._has_step_type(run_id, ResearchStepType.SYNTHESIZER):
             await self.run_dummy_synthesis(run_id)
 
         return await self.get_run_detail(run_id)
+    
+    async def run_dummy_reader(self, run_id: UUID) -> ResearchRun:
+        run = await self.db.get(ResearchRun, run_id)
+        if run is None:
+            raise RunNotFoundError("Research run not found")
+
+        already_read = await self._has_step_type(run_id, ResearchStepType.READER)
+        if already_read:
+            raise InvalidPipelineStateError("Reader has already been run for this research run.")
+
+        has_search = await self._has_step_type(run_id, ResearchStepType.SEARCHER)
+        if not has_search:
+            raise InvalidPipelineStateError("Run search before reader.")
+
+        result = await self.db.execute(select(Source).where(Source.run_id == run_id))
+        sources = list(result.scalars().all())
+
+        if not sources:
+            raise InvalidPipelineStateError("No sources available to read.")
+
+        now = datetime.now(timezone.utc)
+
+        for src in sources:
+            src.raw_content = (
+                f"This is dummy fetched content for source: {src.title or src.url}. "
+                f"It simulates the full text content retrieved from the web."
+            )
+
+            src.summary = (
+                f"Summary for {src.title or src.url}. "
+                f"This represents a condensed version of the source content."
+            )
+
+        next_index = await self._next_step_index(run_id)
+
+        reader_step = ResearchStep(
+            run_id=run.id,
+            step_index=next_index,
+            step_type=ResearchStepType.READER,
+            status=ResearchStepStatus.COMPLETED,
+            started_at=now,
+            completed_at=now,
+            input={"source_ids": [str(s.id) for s in sources]},
+            output={"source_count": len(sources)},
+        )
+
+        self.db.add(reader_step)
+
+        await self.db.commit()
+        await self.db.refresh(run)
+        return run
