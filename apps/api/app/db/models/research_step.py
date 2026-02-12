@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, JSON, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, JSON, func, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,6 +16,13 @@ class ResearchStepType(str, enum.Enum):
     SYNTHESIZER = "synthesizer"
 
 
+class ResearchStepStatus(str, enum.Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+    
 class ResearchStep(Base):
     __tablename__ = "research_steps"
 
@@ -36,6 +43,27 @@ class ResearchStep(Base):
     step_type: Mapped[ResearchStepType] = mapped_column(
         Enum(ResearchStepType, name="research_step_type"),
         nullable=False,
+    )
+
+    status: Mapped[ResearchStepStatus] = mapped_column(
+        Enum(ResearchStepStatus, name="research_step_status"),
+        nullable=False,
+        default=ResearchStepStatus.PENDING,
+    )
+
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    error_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
     )
 
     input: Mapped[dict | None] = mapped_column(JSON, nullable=True)

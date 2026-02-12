@@ -12,9 +12,11 @@ from app.db.models import (
     ResearchRunStatus,
     ResearchStep,
     ResearchStepType,
+    ResearchStepStatus,
     Source,
 )
-
+from datetime import datetime, timezone
+from app.db.models import ResearchStepStatus
 
 class RunNotFoundError(Exception):
     pass
@@ -102,10 +104,15 @@ class PipelineOrchestrator:
 
         next_index = await self._next_step_index(run_id)
 
+        now = datetime.now(timezone.utc)
+
         search_step = ResearchStep(
             run_id=run.id,
             step_index=next_index,
             step_type=ResearchStepType.SEARCHER,
+            status=ResearchStepStatus.COMPLETED,
+            started_at=now,
+            completed_at=now,
             input={"query": query},
             output={
                 "notes": "Dummy searcher v0 – no real web search performed.",
@@ -200,10 +207,15 @@ class PipelineOrchestrator:
 
         next_index = await self._next_step_index(run_id)
 
+        now = datetime.now(timezone.utc)
+
         synth_step = ResearchStep(
             run_id=run.id,
             step_index=next_index,
             step_type=ResearchStepType.SYNTHESIZER,
+            status=ResearchStepStatus.COMPLETED,
+            started_at=now,
+            completed_at=now,
             input={"source_ids": [str(s.id) for s in sources]},
             output={
                 "answer": answer_text,

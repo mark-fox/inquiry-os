@@ -1,5 +1,5 @@
 from .research_run import ResearchRun, ResearchRunStatus
-from .research_step import ResearchStep, ResearchStepType
+from .research_step import ResearchStep, ResearchStepType, ResearchStepStatus
 from .source import Source
 from .answer import Answer
 
@@ -10,4 +10,5 @@ __all__ = [
     "ResearchStepType",
     "Source",
     "Answer",
+    "ResearchStepStatus",
 ]
