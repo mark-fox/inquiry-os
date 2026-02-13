@@ -425,3 +425,39 @@ class PipelineOrchestrator:
         await self.db.commit()
         await self.db.refresh(run)
         return run
+    
+    async def get_run_state(self, run_id: UUID) -> dict:
+        run = await self.get_run_detail(run_id)
+
+        # Map latest step per type
+        latest_by_type: dict[ResearchStepType, ResearchStep] = {}
+        for step in sorted(run.steps, key=lambda s: s.step_index):
+            latest_by_type[step.step_type] = step
+
+        steps: dict[ResearchStepType, dict] = {}
+        for t in ResearchStepType:
+            s = latest_by_type.get(t)
+            if s is None:
+                steps[t] = {
+                    "status": ResearchStepStatus.PENDING,
+                    "started_at": None,
+                    "completed_at": None,
+                    "error_message": None,
+                }
+            else:
+                steps[t] = {
+                    "status": s.status,
+                    "started_at": s.started_at,
+                    "completed_at": s.completed_at,
+                    "error_message": s.error_message,
+                }
+
+        sources_with_summary = sum(1 for src in run.sources if (src.summary or "").strip())
+
+        return {
+            "run_id": run.id,
+            "status": run.status,
+            "steps": steps,
+            "source_count": len(run.sources),
+            "sources_with_summary": sources_with_summary,
+        }

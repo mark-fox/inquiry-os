@@ -21,6 +21,7 @@ from app.services.pipeline_orchestrator import (
     RunNotFoundError,
     InvalidPipelineStateError,
 )
+from app.schemas.research_state import ResearchRunState
 
 router = APIRouter(
     prefix="/research-runs",
@@ -266,3 +267,22 @@ async def execute_pipeline(
         raise HTTPException(status_code=502, detail="Pipeline execution failed")
 
     return run
+
+
+@router.get(
+    "/{run_id}/state",
+    response_model=ResearchRunState,
+    status_code=status.HTTP_200_OK,
+)
+async def get_research_run_state(
+    run_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ResearchRunState:
+    orchestrator = PipelineOrchestrator(db=db)
+
+    try:
+        payload = await orchestrator.get_run_state(run_id)
+    except RunNotFoundError:
+        raise HTTPException(status_code=404, detail="Research run not found")
+
+    return payload
