@@ -18,6 +18,7 @@ from app.db.models import (
 from datetime import datetime, timezone
 from app.db.models import ResearchStepStatus
 from app.services.search_clients.duckduckgo_client import DuckDuckGoClient
+from app.services.web_fetcher import fetch_html, extract_text_from_html, basic_summary, UnsafeUrlError
 
 class RunNotFoundError(Exception):
     pass
@@ -199,6 +200,10 @@ class PipelineOrchestrator:
             for idx, src in enumerate(sources, start=1):
                 title = src.title or src.url
                 lines.append(f"{idx}. {title} — {src.url}")
+
+                summ = (src.summary or "").strip()
+                if summ:
+                    lines.append(f"   Summary: {summ}")
             lines.append("")
             lines.append(
                 "A proper LLM-backed synthesizer will later read and compare these "
@@ -240,6 +245,21 @@ class PipelineOrchestrator:
 
         if not await self._has_step_type(run_id, ResearchStepType.READER):
             await self.run_dummy_reader(run_id)
+
+        if not await self._has_step_type(run_id, ResearchStepType.SYNTHESIZER):
+            await self.run_dummy_synthesis(run_id)
+
+        return await self.get_run_detail(run_id)
+    
+    async def execute_pipeline(self, run_id: UUID) -> ResearchRun:
+        # Always return the latest persisted state at the end
+        await self.get_run_detail(run_id)
+
+        if not await self._has_step_type(run_id, ResearchStepType.SEARCHER):
+            await self.run_web_search(run_id, limit=5)
+
+        if not await self._has_step_type(run_id, ResearchStepType.READER):
+            await self.run_web_reader(run_id, limit=5)
 
         if not await self._has_step_type(run_id, ResearchStepType.SYNTHESIZER):
             await self.run_dummy_synthesis(run_id)
@@ -343,6 +363,64 @@ class PipelineOrchestrator:
         self.db.add_all(sources)
 
         await self._set_status_running_if_pending(run)
+
+        await self.db.commit()
+        await self.db.refresh(run)
+        return run
+    
+    async def run_web_reader(self, run_id: UUID, limit: int = 5) -> ResearchRun:
+        run = await self.db.get(ResearchRun, run_id)
+        if run is None:
+            raise RunNotFoundError("Research run not found")
+
+        has_search = await self._has_step_type(run_id, ResearchStepType.SEARCHER)
+        if not has_search:
+            raise InvalidPipelineStateError("Run search before reader.")
+
+        already_read = await self._has_step_type(run_id, ResearchStepType.READER)
+        if already_read:
+            raise InvalidPipelineStateError("Reader has already been run for this research run.")
+
+        result = await self.db.execute(select(Source).where(Source.run_id == run_id))
+        sources = list(result.scalars().all())
+
+        # Read only sources that don't have raw_content yet
+        to_read = [s for s in sources if not s.raw_content][:limit]
+
+        now = datetime.now(timezone.utc)
+        next_index = await self._next_step_index(run_id)
+
+        read_count = 0
+        failed: list[dict[str, str]] = []
+
+        for src in to_read:
+            try:
+                page = await fetch_html(src.url)
+                text = extract_text_from_html(page.html)
+
+                # Keep raw_content bounded so DB doesn't explode
+                src.raw_content = text[:20_000]
+                src.summary = basic_summary(text, max_chars=900)
+                read_count += 1
+            except (UnsafeUrlError, httpx.HTTPError, Exception) as exc:  # noqa: BLE001
+                failed.append({"url": src.url, "error": str(exc)})
+
+        step = ResearchStep(
+            run_id=run.id,
+            step_index=next_index,
+            step_type=ResearchStepType.READER,
+            status=ResearchStepStatus.COMPLETED,
+            started_at=now,
+            completed_at=datetime.now(timezone.utc),
+            input={"limit": limit},
+            output={
+                "attempted": len(to_read),
+                "read_count": read_count,
+                "failed_count": len(failed),
+                "failed": failed[:10],
+            },
+        )
+        self.db.add(step)
 
         await self.db.commit()
         await self.db.refresh(run)
