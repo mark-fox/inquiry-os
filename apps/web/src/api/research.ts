@@ -208,3 +208,7 @@ export async function runDummySynthesis(
 export async function getResearchRunState(runId: string): Promise<ResearchRunState> {
     return apiGet<ResearchRunState>(`/research-runs/${runId}/state`);
 }
+
+export async function executePipeline(runId: string): Promise<ResearchRunDetail> {
+  return apiPost<undefined, ResearchRunDetail>(`/research-runs/${runId}/execute`, undefined);
+}

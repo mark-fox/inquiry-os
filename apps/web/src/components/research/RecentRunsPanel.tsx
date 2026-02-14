@@ -11,6 +11,7 @@ import {
     getResearchRunState,
     runDummySearch,
     runDummySynthesis,
+    executePipeline,
 } from "../../api/research";
 
 function formatDate(value: string): string {
@@ -33,6 +34,8 @@ export function RecentRunsPanel() {
 
     const [runState, setRunState] = useState<ResearchRunState | null>(null);
     const [isStateLoading, setIsStateLoading] = useState(false);
+
+    const [isExecuteRunning, setIsExecuteRunning] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -161,6 +164,30 @@ export function RecentRunsPanel() {
     }
 
 
+    async function handleExecutePipeline() {
+        if (!selectedDetail) return;
+
+        setIsExecuteRunning(true);
+        setDetailError(null);
+
+        try {
+            const updated = await executePipeline(selectedDetail.id);
+            setSelectedDetail(updated);
+
+            const state = await getResearchRunState(selectedDetail.id);
+            setRunState(state);
+
+            const refreshedRuns = await listResearchRuns(10, 0);
+            setRuns(refreshedRuns);
+        } catch (err) {
+            const message =
+                err instanceof Error ? err.message : "Failed to execute pipeline.";
+            setDetailError(message);
+        } finally {
+            setIsExecuteRunning(false);
+        }
+    }
+
     return (
         <aside className="rounded-xl border border-app-border bg-app-surface p-4 shadow-soft">
             <h2 className="text-sm font-semibold">Recent runs</h2>
@@ -238,6 +265,15 @@ export function RecentRunsPanel() {
                         <span className="font-mono">{selectedDetail.model_provider}</span>
                     </p>
 
+                    <button
+                        type="button"
+                        onClick={handleExecutePipeline}
+                        disabled={isExecuteRunning}
+                        className="mt-2 inline-flex items-center rounded-md bg-app-accent px-2.5 py-1 text-[11px] font-medium text-app-bg transition hover:bg-app-accentSoft disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        {isExecuteRunning ? "Running pipeline…" : "Run pipeline"}
+                    </button>
+                    
                     <button
                         type="button"
                         onClick={handleRunDummySearch}
