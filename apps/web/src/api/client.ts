@@ -38,3 +38,16 @@ export async function apiPost<TBody, TResponse>(
 
     return handleResponse<TResponse>(res);
 }
+
+export async function apiGet<TResponse>(path: string): Promise<TResponse> {
+  const url = `${API_BASE_URL}${path}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  return handleResponse<TResponse>(res);
+}

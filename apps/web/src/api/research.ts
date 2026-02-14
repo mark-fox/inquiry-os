@@ -1,4 +1,4 @@
-import { apiPost } from "./client";
+import { apiPost, apiGet } from "./client";
 
 export interface ResearchRunCreate {
     query: string;
@@ -54,6 +54,23 @@ export interface ResearchRunDetail extends ResearchRunRead {
     steps: ResearchStepRead[];
     sources: SourceRead[];
 }
+
+export type ResearchStepStatus = "pending" | "running" | "completed" | "failed";
+
+export type StepState = {
+    status: ResearchStepStatus;
+    started_at: string | null;
+    completed_at: string | null;
+    error_message: string | null;
+};
+
+export type ResearchRunState = {
+    run_id: string;
+    status: string;
+    steps: Record<ResearchStepType, StepState>;
+    source_count: number;
+    sources_with_summary: number;
+};
 
 export async function createResearchRun(
     payload: ResearchRunCreate,
@@ -158,32 +175,36 @@ export async function runDummySearch(
 
 
 export async function runDummySynthesis(
-  runId: string,
+    runId: string,
 ): Promise<ResearchRunDetail> {
-  const baseUrl =
-    import.meta.env.VITE_API_BASE_URL?.toString() ||
-    "http://localhost:8000/api/v1";
+    const baseUrl =
+        import.meta.env.VITE_API_BASE_URL?.toString() ||
+        "http://localhost:8000/api/v1";
 
-  const url = `${baseUrl}/research-runs/${runId}/synthesize-dummy`;
+    const url = `${baseUrl}/research-runs/${runId}/synthesize-dummy`;
 
-  const res = await fetch(url, {
-    method: "POST",
-  });
+    const res = await fetch(url, {
+        method: "POST",
+    });
 
-  if (!res.ok) {
-    let message = `Request failed with status ${res.status}`;
+    if (!res.ok) {
+        let message = `Request failed with status ${res.status}`;
 
-    try {
-      const data = await res.json();
-      if (data && typeof data.detail === "string") {
-        message = data.detail;
-      }
-    } catch {
-      // ignore JSON parse error
+        try {
+            const data = await res.json();
+            if (data && typeof data.detail === "string") {
+                message = data.detail;
+            }
+        } catch {
+            // ignore JSON parse error
+        }
+
+        throw new Error(message);
     }
 
-    throw new Error(message);
-  }
+    return (await res.json()) as ResearchRunDetail;
+}
 
-  return (await res.json()) as ResearchRunDetail;
+export async function getResearchRunState(runId: string): Promise<ResearchRunState> {
+    return apiGet<ResearchRunState>(`/research-runs/${runId}/state`);
 }

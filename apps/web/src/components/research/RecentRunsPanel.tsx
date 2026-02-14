@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
-import type { ResearchRunRead, ResearchRunDetail } from "../../api/research";
+import type {
+    ResearchRunRead,
+    ResearchRunDetail,
+    ResearchRunState,
+    ResearchStepType,
+} from "../../api/research";
 import {
     listResearchRuns,
     getResearchRunDetail,
+    getResearchRunState,
     runDummySearch,
     runDummySynthesis,
 } from "../../api/research";
@@ -24,6 +30,9 @@ export function RecentRunsPanel() {
     const [detailError, setDetailError] = useState<string | null>(null);
     const [isSearchRunning, setIsSearchRunning] = useState(false);
     const [isSynthesisRunning, setIsSynthesisRunning] = useState(false);
+
+    const [runState, setRunState] = useState<ResearchRunState | null>(null);
+    const [isStateLoading, setIsStateLoading] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -64,12 +73,17 @@ export function RecentRunsPanel() {
         try {
             const detail = await getResearchRunDetail(runId);
             setSelectedDetail(detail);
+
+            setIsStateLoading(true);
+            const state = await getResearchRunState(runId);
+            setRunState(state);
         } catch (err) {
             const message =
                 err instanceof Error ? err.message : "Failed to load run details.";
             setDetailError(message);
         } finally {
             setIsDetailLoading(false);
+            setIsStateLoading(false);
         }
     }
 
@@ -83,6 +97,8 @@ export function RecentRunsPanel() {
         try {
             const updated = await runDummySearch(selectedDetail.id);
             setSelectedDetail(updated);
+            const state = await getResearchRunState(selectedDetail.id);
+            setRunState(state);
 
             // Optional: refresh the list so status / timestamps stay in sync
             try {
@@ -125,6 +141,8 @@ export function RecentRunsPanel() {
         try {
             const updated = await runDummySynthesis(selectedDetail.id);
             setSelectedDetail(updated);
+            const state = await getResearchRunState(selectedDetail.id);
+            setRunState(state);
 
             // Optional: refresh the run list so you see updated status if it changes
             try {
@@ -140,25 +158,6 @@ export function RecentRunsPanel() {
         } finally {
             setIsSynthesisRunning(false);
         }
-    }
-
-
-    function getStepPresence(detail: ResearchRunDetail | null) {
-        if (!detail) {
-            return {
-                hasPlanner: false,
-                hasSearcher: false,
-                hasSynthesizer: false,
-            };
-        }
-
-        const hasPlanner = detail.steps.some((s) => s.step_type === "planner");
-        const hasSearcher = detail.steps.some((s) => s.step_type === "searcher");
-        const hasSynthesizer = detail.steps.some(
-            (s) => s.step_type === "synthesizer",
-        );
-
-        return { hasPlanner, hasSearcher, hasSynthesizer };
     }
 
 
@@ -260,40 +259,44 @@ export function RecentRunsPanel() {
                     </button>
 
                     {/* Pipeline status */}
-                    {(() => {
-                        const pipeline = getStepPresence(selectedDetail);
+                    <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
+                        <p className="text-[11px] font-semibold">Pipeline status</p>
+                        <p className="mt-1 text-[10px] text-app-muted">
+                            Live pipeline state from the backend.
+                        </p>
 
-                        return (
-                            <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
-                                <p className="text-[11px] font-semibold">
-                                    Pipeline status
-                                </p>
-                                <p className="mt-1 text-[10px] text-app-muted">
-                                    Which agents have been run for this research question.
-                                </p>
-                                <ul className="mt-2 space-y-1 text-[11px]">
-                                    <li>
-                                        <span className="font-semibold">Planner:</span>{" "}
-                                        <span className="text-app-muted">
-                                            {pipeline.hasPlanner ? "done" : "not run yet"}
-                                        </span>
-                                    </li>
-                                    <li>
-                                        <span className="font-semibold">Searcher:</span>{" "}
-                                        <span className="text-app-muted">
-                                            {pipeline.hasSearcher ? "done" : "not run yet"}
-                                        </span>
-                                    </li>
-                                    <li>
-                                        <span className="font-semibold">Synthesizer:</span>{" "}
-                                        <span className="text-app-muted">
-                                            {pipeline.hasSynthesizer ? "done" : "not run yet"}
-                                        </span>
-                                    </li>
-                                </ul>
-                            </div>
-                        );
-                    })()}
+                        {isStateLoading && (
+                            <p className="mt-2 text-[11px] text-app-muted">Loading pipeline state…</p>
+                        )}
+
+                        {!isStateLoading && !runState && (
+                            <p className="mt-2 text-[11px] text-app-muted">
+                                No pipeline state loaded yet.
+                            </p>
+                        )}
+
+                        {!isStateLoading && runState && (
+                            <ul className="mt-2 space-y-1 text-[11px]">
+                                {(["planner", "searcher", "reader", "synthesizer"] as ResearchStepType[]).map((t) => {
+                                    const s = runState.steps[t];
+                                    return (
+                                        <li key={t}>
+                                            <span className="font-semibold">
+                                                {t.charAt(0).toUpperCase() + t.slice(1)}:
+                                            </span>{" "}
+                                            <span className="text-app-muted">{s.status}</span>
+                                            {s.error_message ? (
+                                                <span className="ml-2 text-red-400">({s.error_message})</span>
+                                            ) : null}
+                                        </li>
+                                    );
+                                })}
+                                <li className="pt-2 text-[10px] text-app-muted">
+                                    Sources: {runState.source_count} • Summarized: {runState.sources_with_summary}
+                                </li>
+                            </ul>
+                        )}
+                    </div>
 
                     {/* Planner steps */}
                     <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
