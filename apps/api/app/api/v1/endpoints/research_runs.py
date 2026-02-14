@@ -115,62 +115,6 @@ async def get_research_run_detail(
 
 
 @router.post(
-    "/{run_id}/search-dummy",
-    response_model=ResearchRunDetail,
-    status_code=status.HTTP_200_OK,
-)
-async def run_dummy_search(
-    run_id: UUID,
-    db: AsyncSession = Depends(get_db),
-) -> ResearchRunDetail:
-    orchestrator = PipelineOrchestrator(db=db)
-
-    try:
-        await orchestrator.run_dummy_search(run_id)
-        run = await orchestrator.get_run_detail(run_id)
-    except RunNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Research run not found",
-        )
-    except InvalidPipelineStateError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        )
-
-    return run
-
-
-@router.post(
-    "/{run_id}/synthesize-dummy",
-    response_model=ResearchRunDetail,
-    status_code=status.HTTP_200_OK,
-)
-async def run_dummy_synthesis(
-    run_id: UUID,
-    db: AsyncSession = Depends(get_db),
-) -> ResearchRunDetail:
-    orchestrator = PipelineOrchestrator(db=db)
-
-    try:
-        await orchestrator.run_dummy_synthesis(run_id)
-        run = await orchestrator.get_run_detail(run_id)
-    except RunNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Research run not found",
-        )
-    except InvalidPipelineStateError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        )
-
-    return run
-
-
-@router.post(
     "/{run_id}/execute-dummy",
     response_model=ResearchRunDetail,
     status_code=status.HTTP_200_OK,

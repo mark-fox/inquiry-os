@@ -9,8 +9,6 @@ import {
     listResearchRuns,
     getResearchRunDetail,
     getResearchRunState,
-    runDummySearch,
-    runDummySynthesis,
     executePipeline,
 } from "../../api/research";
 
@@ -29,8 +27,6 @@ export function RecentRunsPanel() {
     );
     const [isDetailLoading, setIsDetailLoading] = useState(false);
     const [detailError, setDetailError] = useState<string | null>(null);
-    const [isSearchRunning, setIsSearchRunning] = useState(false);
-    const [isSynthesisRunning, setIsSynthesisRunning] = useState(false);
 
     const [runState, setRunState] = useState<ResearchRunState | null>(null);
     const [isStateLoading, setIsStateLoading] = useState(false);
@@ -91,35 +87,6 @@ export function RecentRunsPanel() {
     }
 
 
-    async function handleRunDummySearch() {
-        if (!selectedDetail) return;
-
-        setIsSearchRunning(true);
-        setDetailError(null);
-
-        try {
-            const updated = await runDummySearch(selectedDetail.id);
-            setSelectedDetail(updated);
-            const state = await getResearchRunState(selectedDetail.id);
-            setRunState(state);
-
-            // Optional: refresh the list so status / timestamps stay in sync
-            try {
-                const refreshedRuns = await listResearchRuns(10, 0);
-                setRuns(refreshedRuns);
-            } catch {
-                // if this fails, it's non-fatal for now
-            }
-        } catch (err) {
-            const message =
-                err instanceof Error ? err.message : "Failed to run dummy search.";
-            setDetailError(message);
-        } finally {
-            setIsSearchRunning(false);
-        }
-    }
-
-
     function getSynthAnswer(detail: ResearchRunDetail | null): string | null {
         if (!detail) return null;
 
@@ -135,35 +102,6 @@ export function RecentRunsPanel() {
     }
 
 
-    async function handleRunDummySynthesis() {
-        if (!selectedDetail) return;
-
-        setIsSynthesisRunning(true);
-        setDetailError(null);
-
-        try {
-            const updated = await runDummySynthesis(selectedDetail.id);
-            setSelectedDetail(updated);
-            const state = await getResearchRunState(selectedDetail.id);
-            setRunState(state);
-
-            // Optional: refresh the run list so you see updated status if it changes
-            try {
-                const refreshedRuns = await listResearchRuns(10, 0);
-                setRuns(refreshedRuns);
-            } catch {
-                // non-fatal
-            }
-        } catch (err) {
-            const message =
-                err instanceof Error ? err.message : "Failed to run dummy synthesis.";
-            setDetailError(message);
-        } finally {
-            setIsSynthesisRunning(false);
-        }
-    }
-
-
     async function handleExecutePipeline() {
         if (!selectedDetail) return;
 
@@ -171,7 +109,7 @@ export function RecentRunsPanel() {
         setDetailError(null);
 
         try {
-            const updated = await executePipeline(selectedDetail.id);
+            const updated = await executePipeline(selectedDetail.id, "dummy");
             setSelectedDetail(updated);
 
             const state = await getResearchRunState(selectedDetail.id);
@@ -272,26 +210,6 @@ export function RecentRunsPanel() {
                         className="mt-2 inline-flex items-center rounded-md bg-app-accent px-2.5 py-1 text-[11px] font-medium text-app-bg transition hover:bg-app-accentSoft disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         {isExecuteRunning ? "Running pipeline…" : "Run pipeline"}
-                    </button>
-                    
-                    <button
-                        type="button"
-                        onClick={handleRunDummySearch}
-                        disabled={isSearchRunning}
-                        className="mt-2 inline-flex items-center rounded-md bg-app-accent px-2.5 py-1 text-[11px] font-medium text-app-bg transition hover:bg-app-accentSoft disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        {isSearchRunning ? "Running dummy search…" : "Run dummy search"}
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={handleRunDummySynthesis}
-                        disabled={isSynthesisRunning}
-                        className="inline-flex items-center rounded-md bg-app-accentSoft px-2.5 py-1 text-[11px] font-medium text-app-text transition hover:bg-app-accent/80 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                        {isSynthesisRunning
-                            ? "Generating dummy answer…"
-                            : "Generate dummy answer"}
                     </button>
 
                     {/* Pipeline status */}
@@ -443,13 +361,13 @@ export function RecentRunsPanel() {
                             citations and deeper comparison.
                         </p>
 
-                        {isSynthesisRunning && (
+                        {isExecuteRunning && (
                             <p className="mt-2 text-[11px] text-app-muted">
                                 Generating answer…
                             </p>
                         )}
 
-                        {!isSynthesisRunning && (() => {
+                        {!isExecuteRunning && (() => {
                             const answer = getSynthAnswer(selectedDetail);
                             if (!answer) {
                                 return (
