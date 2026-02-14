@@ -247,29 +247,6 @@ async def run_web_reader(
     return run
 
 
-@router.post(
-    "/{run_id}/execute",
-    response_model=ResearchRunDetail,
-    status_code=status.HTTP_200_OK,
-)
-async def execute_pipeline(
-    run_id: UUID,
-    db: AsyncSession = Depends(get_db),
-) -> ResearchRunDetail:
-    orchestrator = PipelineOrchestrator(db=db)
-
-    try:
-        run = await orchestrator.execute_pipeline(run_id)
-    except RunNotFoundError:
-        raise HTTPException(status_code=404, detail="Research run not found")
-    except InvalidPipelineStateError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    except Exception:
-        raise HTTPException(status_code=502, detail="Pipeline execution failed")
-
-    return run
-
-
 @router.get(
     "/{run_id}/state",
     response_model=ResearchRunState,
