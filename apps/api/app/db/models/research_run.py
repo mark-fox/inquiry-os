@@ -72,3 +72,8 @@ class ResearchRun(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+
+    events: Mapped[list["PipelineEvent"]] = relationship(
+    back_populates="run",
+    cascade="all, delete-orphan",
+    )
