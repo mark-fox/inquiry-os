@@ -87,18 +87,13 @@ export function RecentRunsPanel() {
     }
 
 
-    function getSynthAnswer(detail: ResearchRunDetail | null): string | null {
+    function getSynthOutput(detail: ResearchRunDetail | null): Record<string, unknown> | null {
         if (!detail) return null;
 
-        const step = detail.steps.find(
-            (s) => s.step_type === "synthesizer",
-        );
+        const step = detail.steps.find((s) => s.step_type === "synthesizer");
         if (!step || !step.output) return null;
 
-        const out = step.output as Record<string, unknown>;
-        const value = out["answer"];
-
-        return typeof value === "string" ? value : null;
+        return step.output as Record<string, unknown>;
     }
 
 
@@ -352,35 +347,86 @@ export function RecentRunsPanel() {
 
                     {/* Answer */}
                     <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
-                        <p className="text-[11px] font-semibold">
-                            Answer (dummy)
-                        </p>
+                        <p className="text-[11px] font-semibold">Answer</p>
                         <p className="mt-1 text-[10px] text-app-muted">
-                            This synthesized answer is produced by the dummy synthesizer
-                            agent. Later this will be powered by a real LLM and include
-                            citations and deeper comparison.
+                            This synthesized answer is produced by the synthesizer agent.
                         </p>
 
                         {isExecuteRunning && (
-                            <p className="mt-2 text-[11px] text-app-muted">
-                                Generating answer…
-                            </p>
+                            <p className="mt-2 text-[11px] text-app-muted">Generating answer…</p>
                         )}
 
                         {!isExecuteRunning && (() => {
-                            const answer = getSynthAnswer(selectedDetail);
-                            if (!answer) {
+                            const out = getSynthOutput(selectedDetail);
+                            if (!out) {
                                 return (
                                     <p className="mt-2 text-[11px] text-app-muted">
-                                        No answer yet. Run the dummy synthesis to generate one.
+                                        No answer yet. Run the pipeline to generate one.
                                     </p>
                                 );
                             }
 
+                            const summary = typeof out.summary === "string" ? out.summary : "";
+                            const recommendation =
+                                typeof out.recommendation === "string" ? out.recommendation : "";
+                            const confidence = typeof out.confidence === "number" ? out.confidence : null;
+
+                            const keyPoints = Array.isArray(out.key_points) ? out.key_points : [];
+                            const risks = Array.isArray(out.risks) ? out.risks : [];
+
                             return (
-                                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-black/60 p-2 text-[11px] text-app-text">
-                                    {answer}
-                                </pre>
+                                <div className="mt-2 space-y-2 text-[11px]">
+                                    <div>
+                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-app-muted">
+                                            Summary
+                                        </p>
+                                        <p className="mt-1 text-app-text">{summary || "—"}</p>
+                                    </div>
+
+                                    <div>
+                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-app-muted">
+                                            Key points
+                                        </p>
+                                        {keyPoints.length === 0 ? (
+                                            <p className="mt-1 text-app-muted">—</p>
+                                        ) : (
+                                            <ul className="mt-1 list-disc space-y-1 pl-4">
+                                                {keyPoints.map((p: unknown, idx: number) => (
+                                                    <li key={idx}>{String(p)}</li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-app-muted">
+                                            Risks
+                                        </p>
+                                        {risks.length === 0 ? (
+                                            <p className="mt-1 text-app-muted">—</p>
+                                        ) : (
+                                            <ul className="mt-1 list-disc space-y-1 pl-4">
+                                                {risks.map((r: unknown, idx: number) => (
+                                                    <li key={idx}>{String(r)}</li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-app-muted">
+                                            Recommendation
+                                        </p>
+                                        <p className="mt-1 text-app-text">{recommendation || "—"}</p>
+                                    </div>
+
+                                    <div className="text-[10px] text-app-muted">
+                                        Confidence:{" "}
+                                        <span className="font-mono text-app-text">
+                                            {confidence === null ? "n/a" : confidence.toFixed(2)}
+                                        </span>
+                                    </div>
+                                </div>
                             );
                         })()}
                     </div>

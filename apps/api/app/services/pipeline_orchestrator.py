@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from uuid import UUID
+import json
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,8 @@ from app.db.models import ResearchStepStatus
 from app.services.search_clients.duckduckgo_client import DuckDuckGoClient
 from app.services.web_fetcher import fetch_html, extract_text_from_html, basic_summary, UnsafeUrlError
 from app.schemas.execution import ExecutionMode
+from app.core.llm import LLMClient, get_llm_client
+from app.schemas.synthesis import SynthesisOutput
 
 class RunNotFoundError(Exception):
     pass
@@ -263,7 +266,7 @@ class PipelineOrchestrator:
             await self.run_web_reader(run_id, limit=5)
 
         if not await self._has_step_type(run_id, ResearchStepType.SYNTHESIZER):
-            await self.run_dummy_synthesis(run_id)
+            await self.run_llm_synthesis(run_id)
 
         return await self.get_run_detail(run_id)
     
@@ -471,3 +474,123 @@ class PipelineOrchestrator:
 
         # Always return canonical detail view
         return await self.get_run_detail(run_id)
+    
+    async def run_llm_synthesis(self, run_id: UUID) -> ResearchRun:
+        run = await self.db.get(ResearchRun, run_id)
+        if run is None:
+            raise RunNotFoundError("Research run not found")
+
+        already_synthesized = await self._has_step_type(run_id, ResearchStepType.SYNTHESIZER)
+        if already_synthesized:
+            raise InvalidPipelineStateError("Synthesis has already been run for this research run.")
+
+        has_reader = await self._has_step_type(run_id, ResearchStepType.READER)
+        if not has_reader:
+            raise InvalidPipelineStateError("Run reader before synthesis.")
+
+        # Load sources (prefer summaries; fall back to title/url)
+        result = await self.db.execute(select(Source).where(Source.run_id == run_id))
+        sources = list(result.scalars().all())
+
+        if not sources:
+            raise InvalidPipelineStateError("No sources available for synthesis.")
+
+        # Build context from summaries (bounded)
+        context_lines: list[str] = []
+        for idx, src in enumerate(sources, start=1):
+            title = src.title or src.url
+            summ = (src.summary or "").strip()
+            if not summ:
+                summ = f"(No summary) {title}"
+            context_lines.append(f"[{idx}] {title}\nURL: {src.url}\nSummary: {summ}\n")
+
+        context = "\n".join(context_lines)
+        context = context[:12_000]  # hard cap to keep prompt reasonable
+
+        prompt = f"""You are an expert research assistant.
+Given a research question and summaries of sources, produce a JSON object that matches this schema:
+
+{{
+  "summary": string,
+  "key_points": [string, ...],
+  "risks": [string, ...],
+  "recommendation": string,
+  "confidence": number  // 0.0 to 1.0
+}}
+
+Rules:
+- Output MUST be valid JSON only. No markdown. No extra text.
+- Use the sources' summaries as evidence.
+- Be concise and practical.
+
+Research question:
+{run.query}
+
+Sources:
+{context}
+"""
+
+        # Get LLM client (Ollama by default)
+        try:
+            llm: LLMClient = get_llm_client()
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidPipelineStateError(f"LLM client unavailable: {exc}")
+
+        now = datetime.now(timezone.utc)
+        next_index = await self._next_step_index(run_id)
+
+        raw_completion = await llm.generate(prompt=prompt, options={"max_tokens": 900})
+
+        # Parse JSON safely
+        parsed: dict
+        parse_error: str | None = None
+        try:
+            parsed = json.loads(raw_completion)
+        except Exception as exc:  # noqa: BLE001
+            parsed = {
+                "summary": "Failed to parse model output as JSON.",
+                "key_points": [],
+                "risks": ["Model returned invalid JSON."],
+                "recommendation": "Try running synthesis again or adjust prompt constraints.",
+                "confidence": 0.2,
+            }
+            parse_error = str(exc)
+
+        # Validate against schema (ensures stable structure)
+        try:
+            validated = SynthesisOutput.model_validate(parsed)
+            output_payload = validated.model_dump()
+        except Exception as exc:  # noqa: BLE001
+            output_payload = {
+                "summary": "Model output did not match required schema.",
+                "key_points": [],
+                "risks": ["Schema validation failed."],
+                "recommendation": "Try running synthesis again or refine the prompt/schema.",
+                "confidence": 0.2,
+            }
+            parse_error = f"{parse_error or ''} | schema_error={exc}".strip(" |")
+
+        synth_step = ResearchStep(
+            run_id=run.id,
+            step_index=next_index,
+            step_type=ResearchStepType.SYNTHESIZER,
+            input={
+                "source_ids": [str(s.id) for s in sources],
+                "model_provider": run.model_provider,
+            },
+            output={
+                **output_payload,
+                "_meta": {
+                    "raw_completion": raw_completion,
+                    "parse_error": parse_error,
+                    "source_count": len(sources),
+                },
+            },
+        )
+        self.db.add(synth_step)
+
+        await self._set_status_completed(run)
+
+        await self.db.commit()
+        await self.db.refresh(run)
+        return run
