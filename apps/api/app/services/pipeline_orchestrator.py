@@ -461,3 +461,8 @@ class PipelineOrchestrator:
             "source_count": len(run.sources),
             "sources_with_summary": sources_with_summary,
         }
+    
+    async def execute(self, run_id: UUID, mode: str) -> ResearchRun:
+        if mode == "dummy":
+            return await self.execute_dummy_pipeline(run_id)
+        return await self.execute_pipeline(run_id)
