@@ -279,8 +279,7 @@ async def execute_pipeline(
     orchestrator = PipelineOrchestrator(db=db)
 
     try:
-        await orchestrator.execute(run_id, mode)
-        run = await orchestrator.get_run_detail(run_id)
+        run = await orchestrator.execute(run_id, mode)
     except RunNotFoundError:
         raise HTTPException(status_code=404, detail="Research run not found")
     except InvalidPipelineStateError as exc:

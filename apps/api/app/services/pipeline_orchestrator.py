@@ -463,7 +463,11 @@ class PipelineOrchestrator:
             "sources_with_summary": sources_with_summary,
         }
     
-async def execute(self, run_id: UUID, mode: ExecutionMode) -> ResearchRun:
-    if mode == ExecutionMode.DUMMY:
-        return await self.execute_dummy_pipeline(run_id)
-    return await self.execute_pipeline(run_id)
+    async def execute(self, run_id: UUID, mode: ExecutionMode) -> ResearchRun:
+        if mode == ExecutionMode.DUMMY:
+            await self.execute_dummy_pipeline(run_id)
+        else:
+            await self.execute_pipeline(run_id)
+
+        # Always return canonical detail view
+        return await self.get_run_detail(run_id)
