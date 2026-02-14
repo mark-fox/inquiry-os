@@ -33,6 +33,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Environment: "development" | "staging" | "production"
+    environment: str = "development"
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -23,6 +23,7 @@ from app.services.pipeline_orchestrator import (
 )
 from app.schemas.research_state import ResearchRunState
 from app.schemas.execution import ExecutionMode
+from app.core.config import get_settings
 
 router = APIRouter(
     prefix="/research-runs",
@@ -221,6 +222,10 @@ async def execute_pipeline(
     db: AsyncSession = Depends(get_db),
 ) -> ResearchRunDetail:
     orchestrator = PipelineOrchestrator(db=db)
+
+    settings = get_settings()
+    if mode == ExecutionMode.DUMMY and settings.environment == "production":
+        raise HTTPException(status_code=403, detail="Dummy mode is disabled in production.")
 
     try:
         run = await orchestrator.execute(run_id, mode)
