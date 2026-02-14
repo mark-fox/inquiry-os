@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from app.db.models import ResearchStepStatus
 from app.services.search_clients.duckduckgo_client import DuckDuckGoClient
 from app.services.web_fetcher import fetch_html, extract_text_from_html, basic_summary, UnsafeUrlError
+from app.schemas.execution import ExecutionMode
 
 class RunNotFoundError(Exception):
     pass
@@ -462,7 +463,7 @@ class PipelineOrchestrator:
             "sources_with_summary": sources_with_summary,
         }
     
-    async def execute(self, run_id: UUID, mode: str) -> ResearchRun:
-        if mode == "dummy":
-            return await self.execute_dummy_pipeline(run_id)
-        return await self.execute_pipeline(run_id)
+async def execute(self, run_id: UUID, mode: ExecutionMode) -> ResearchRun:
+    if mode == ExecutionMode.DUMMY:
+        return await self.execute_dummy_pipeline(run_id)
+    return await self.execute_pipeline(run_id)
