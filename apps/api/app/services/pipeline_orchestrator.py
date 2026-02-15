@@ -15,9 +15,11 @@ from app.db.models import (
     ResearchStepType,
     ResearchStepStatus,
     Source,
+    PipelineEvent,
+    PipelineEventType,
+    ExecutionMode as DbExecutionMode,
 )
 from datetime import datetime, timezone
-from app.db.models import ResearchStepStatus
 from app.services.search_clients.duckduckgo_client import DuckDuckGoClient
 from app.services.web_fetcher import fetch_html, extract_text_from_html, basic_summary, UnsafeUrlError
 from app.schemas.execution import ExecutionMode
@@ -52,6 +54,7 @@ class PipelineOrchestrator:
                 selectinload(ResearchRun.steps),
                 selectinload(ResearchRun.sources),
                 selectinload(ResearchRun.answer),
+                selectinload(ResearchRun.events),
             )
             .where(ResearchRun.id == run_id)
         )
@@ -467,12 +470,66 @@ class PipelineOrchestrator:
         }
     
     async def execute(self, run_id: UUID, mode: ExecutionMode) -> ResearchRun:
-        if mode == ExecutionMode.DUMMY:
-            await self.execute_dummy_pipeline(run_id)
-        else:
-            await self.execute_pipeline(run_id)
+        run = await self.db.get(ResearchRun, run_id)
+        if run is None:
+            raise RunNotFoundError("Research run not found")
 
-        # Always return canonical detail view
+        started_at = datetime.now(timezone.utc)
+
+        db_mode = DbExecutionMode.DUMMY if mode == ExecutionMode.DUMMY else DbExecutionMode.REAL
+
+        started_event = PipelineEvent(
+            run_id=run.id,
+            event_type=PipelineEventType.STARTED,
+            mode=db_mode,
+            duration_ms=None,
+            error_message=None,
+        )
+        self.db.add(started_event)
+        await self.db.commit()
+
+        try:
+            if mode == ExecutionMode.DUMMY:
+                await self.execute_dummy_pipeline(run_id)
+            else:
+                await self.execute_pipeline(run_id)
+
+            duration_ms = int((datetime.now(timezone.utc) - started_at).total_seconds() * 1000)
+
+            completed_event = PipelineEvent(
+                run_id=run.id,
+                event_type=PipelineEventType.COMPLETED,
+                mode=db_mode,
+                duration_ms=duration_ms,
+                error_message=None,
+            )
+            self.db.add(completed_event)
+            await self.db.commit()
+
+        except Exception as exc:  # noqa: BLE001
+            # If the pipeline code threw after making DB changes, ensure session is usable
+            await self.db.rollback()
+
+            duration_ms = int((datetime.now(timezone.utc) - started_at).total_seconds() * 1000)
+
+            # Mark run failed (best-effort)
+            run = await self.db.get(ResearchRun, run_id)
+            if run is not None:
+                run.status = ResearchRunStatus.FAILED
+                run.error_message = str(exc)
+
+            failed_event = PipelineEvent(
+                run_id=run_id,
+                event_type=PipelineEventType.FAILED,
+                mode=db_mode,
+                duration_ms=duration_ms,
+                error_message=str(exc),
+            )
+            self.db.add(failed_event)
+            await self.db.commit()
+
+            raise
+
         return await self.get_run_detail(run_id)
     
     async def run_llm_synthesis(self, run_id: UUID) -> ResearchRun:
