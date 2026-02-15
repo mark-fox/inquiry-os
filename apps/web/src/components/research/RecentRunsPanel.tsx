@@ -18,6 +18,17 @@ function formatDate(value: string): string {
     return date.toLocaleString();
 }
 
+function getLatestFailureMessage(detail: ResearchRunDetail | null): string | null {
+    if (!detail?.events?.length) return null;
+
+    const latestFailed = detail.events
+        .slice()
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+        .find((e) => e.event_type === "failed" && e.error_message);
+
+    return latestFailed?.error_message ?? null;
+}
+
 export function RecentRunsPanel() {
     const [runs, setRuns] = useState<ResearchRunRead[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -193,6 +204,17 @@ export function RecentRunsPanel() {
                         </span>
                     </p>
 
+                    {(() => {
+                        const msg = getLatestFailureMessage(selectedDetail);
+                        if (!msg) return null;
+
+                        return (
+                            <p className="mt-2 text-[10px] text-red-400">
+                                Last failure: <span className="font-mono">{msg}</span>
+                            </p>
+                        );
+                    })()}
+
                     <p className="mt-1 text-[10px] text-app-muted">
                         Model:{" "}
                         <span className="font-mono">{selectedDetail.model_provider}</span>
@@ -236,6 +258,38 @@ export function RecentRunsPanel() {
                     >
                         {isExecuteRunning ? "Running pipeline…" : "Run pipeline"}
                     </button>
+
+                    {selectedDetail.status === "failed" && (
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                if (!selectedDetail) return;
+                                setIsExecuteRunning(true);
+                                setDetailError(null);
+
+                                try {
+                                    const updated = await executePipeline(selectedDetail.id, "real");
+                                    setSelectedDetail(updated);
+
+                                    const state = await getResearchRunState(selectedDetail.id);
+                                    setRunState(state);
+
+                                    const refreshedRuns = await listResearchRuns(10, 0);
+                                    setRuns(refreshedRuns);
+                                } catch (err) {
+                                    const message =
+                                        err instanceof Error ? err.message : "Failed to retry pipeline.";
+                                    setDetailError(message);
+                                } finally {
+                                    setIsExecuteRunning(false);
+                                }
+                            }}
+                            disabled={isExecuteRunning}
+                            className="mt-2 inline-flex items-center rounded-md bg-red-500/80 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {isExecuteRunning ? "Retrying…" : "Retry (real)"}
+                        </button>
+                    )}
 
                     {/* Pipeline status */}
                     <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
