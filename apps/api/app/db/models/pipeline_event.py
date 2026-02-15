@@ -45,6 +45,8 @@ class PipelineEvent(Base):
         nullable=False,
     )
 
+    stage: Mapped[str | None] = mapped_column(String(length=50), nullable=True)
+
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

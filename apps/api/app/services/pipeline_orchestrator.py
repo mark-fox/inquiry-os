@@ -488,10 +488,14 @@ class PipelineOrchestrator:
         self.db.add(started_event)
         await self.db.commit()
 
+        stage: str | None = None
+
         try:
             if mode == ExecutionMode.DUMMY:
+                stage = "execute_dummy_pipeline"
                 await self.execute_dummy_pipeline(run_id)
             else:
+                stage = "execute_pipeline"
                 await self.execute_pipeline(run_id)
 
             duration_ms = int((datetime.now(timezone.utc) - started_at).total_seconds() * 1000)
@@ -500,6 +504,7 @@ class PipelineOrchestrator:
                 run_id=run.id,
                 event_type=PipelineEventType.COMPLETED,
                 mode=db_mode,
+                stage=stage,
                 duration_ms=duration_ms,
                 error_message=None,
             )
@@ -522,6 +527,7 @@ class PipelineOrchestrator:
                 run_id=run_id,
                 event_type=PipelineEventType.FAILED,
                 mode=db_mode,
+                stage=stage,
                 duration_ms=duration_ms,
                 error_message=str(exc),
             )
