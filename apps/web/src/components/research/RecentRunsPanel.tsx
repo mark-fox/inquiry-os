@@ -198,6 +198,36 @@ export function RecentRunsPanel() {
                         <span className="font-mono">{selectedDetail.model_provider}</span>
                     </p>
 
+                    {/* Execution history */}
+                    <div className="mt-3 rounded-md border border-app-border bg-black/30 p-2">
+                        <p className="text-[11px] font-semibold">Execution history</p>
+                        <p className="mt-1 text-[10px] text-app-muted">
+                            Audit trail of pipeline runs (started/completed/failed).
+                        </p>
+
+                        {selectedDetail.events?.length ? (
+                            <ul className="mt-2 space-y-1 text-[11px]">
+                                {selectedDetail.events
+                                    .slice()
+                                    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+                                    .slice(0, 8)
+                                    .map((ev) => (
+                                        <li key={ev.id} className="flex items-center justify-between">
+                                            <span className="text-app-text">
+                                                <span className="font-semibold">{ev.event_type}</span>{" "}
+                                                <span className="text-app-muted">({ev.mode})</span>
+                                            </span>
+                                            <span className="text-[10px] text-app-muted">
+                                                {ev.duration_ms != null ? `${ev.duration_ms}ms` : "—"}
+                                            </span>
+                                        </li>
+                                    ))}
+                            </ul>
+                        ) : (
+                            <p className="mt-2 text-[11px] text-app-muted">No execution events yet.</p>
+                        )}
+                    </div>
+
                     <button
                         type="button"
                         onClick={handleExecutePipeline}

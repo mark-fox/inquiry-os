@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.db.models.research_run import ResearchRunStatus
 from app.db.models.research_step import ResearchStepType
+from app.schemas.pipeline_events import PipelineEventRead
 
 
 class ResearchRunBase(BaseModel):
@@ -76,3 +77,4 @@ class ResearchRunDetail(ResearchRunRead):
 
     steps: list[ResearchStepRead] = []
     sources: list[SourceRead] = []
+    events: list[PipelineEventRead] = []

@@ -50,9 +50,19 @@ export interface SourceRead {
     created_at: string;
 }
 
+export interface PipelineEventRead {
+    id: string;
+    event_type: "started" | "completed" | "failed";
+    mode: "real" | "dummy";
+    duration_ms: number | null;
+    error_message: string | null;
+    created_at: string;
+}
+
 export interface ResearchRunDetail extends ResearchRunRead {
     steps: ResearchStepRead[];
     sources: SourceRead[];
+    events: PipelineEventRead[];
 }
 
 export type ResearchStepStatus = "pending" | "running" | "completed" | "failed";
