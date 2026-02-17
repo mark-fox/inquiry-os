@@ -388,6 +388,7 @@ class PipelineOrchestrator:
         if already_read:
             raise InvalidPipelineStateError("Reader has already been run for this research run.")
 
+        # Load sources for this run
         result = await self.db.execute(select(Source).where(Source.run_id == run_id))
         sources = list(result.scalars().all())
 
@@ -400,18 +401,58 @@ class PipelineOrchestrator:
         read_count = 0
         failed: list[dict[str, str]] = []
 
-        for src in to_read:
-            try:
-                page = await fetch_html(src.url)
-                text = extract_text_from_html(page.html)
+        if not to_read:
+            step = ResearchStep(
+                run_id=run.id,
+                step_index=next_index,
+                step_type=ResearchStepType.READER,
+                status=ResearchStepStatus.COMPLETED,
+                started_at=now,
+                completed_at=datetime.now(timezone.utc),
+                input={"limit": limit},
+                output={
+                    "attempted": 0,
+                    "read_count": 0,
+                    "failed_count": 0,
+                    "failed": [],
+                    "notes": "No unread sources found.",
+                },
+            )
+            self.db.add(step)
+            await self.db.commit()
+            await self.db.refresh(run)
+            return run
 
-                # Keep raw_content bounded so DB doesn't explode
-                src.raw_content = text[:20_000]
-                src.summary = basic_summary(text, max_chars=900)
-                read_count += 1
-            except (UnsafeUrlError, httpx.HTTPError, Exception) as exc:  # noqa: BLE001
-                failed.append({"url": src.url, "error": str(exc)})
+        # --- concurrent read with bounded parallelism ---
+        import asyncio  # local import to keep file minimal
 
+        semaphore = asyncio.Semaphore(4)  # keep it small; avoids hammering sites
+
+        async def read_one(src: Source) -> None:
+            nonlocal read_count
+
+            async with semaphore:
+                try:
+                    page = await fetch_html(src.url)
+                    text = extract_text_from_html(page.html)
+
+                    # Keep raw_content bounded so DB doesn't explode
+                    cleaned = (text or "").strip()
+                    if not cleaned:
+                        raise ValueError("Empty extracted text")
+
+                    src.raw_content = cleaned[:20_000]
+                    src.summary = basic_summary(cleaned, max_chars=900)
+                    read_count += 1
+
+                except (UnsafeUrlError, httpx.HTTPError, ValueError) as exc:
+                    failed.append({"url": src.url, "error": str(exc)})
+                except Exception as exc:  # noqa: BLE001
+                    failed.append({"url": src.url, "error": f"Unexpected error: {exc}"})
+
+        await asyncio.gather(*(read_one(s) for s in to_read))
+
+        # Mark step status: completed even if partial, but record failures
         step = ResearchStep(
             run_id=run.id,
             step_index=next_index,
