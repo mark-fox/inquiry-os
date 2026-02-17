@@ -712,6 +712,36 @@ class PipelineOrchestrator:
             }
             parse_error = f"{parse_error or ''} | schema_error={exc}".strip(" |")
 
+        # --- Citation enforcement layer ---
+        import re
+
+        citation_pattern = re.compile(r"\[\d+\]")
+
+        def _has_citation(text: str) -> bool:
+            return bool(citation_pattern.search(text))
+
+        all_points = output_payload.get("key_points", [])
+        all_risks = output_payload.get("risks", [])
+
+        missing_citations = []
+
+        for idx, point in enumerate(all_points):
+            if isinstance(point, str) and not _has_citation(point):
+                missing_citations.append(f"key_points[{idx}]")
+
+        for idx, risk in enumerate(all_risks):
+            if isinstance(risk, str) and not _has_citation(risk):
+                missing_citations.append(f"risks[{idx}]")
+
+        if missing_citations:
+            output_payload["confidence"] = min(output_payload.get("confidence", 0.5), 0.3)
+            output_payload.setdefault("_warnings", []).append(
+                {
+                    "type": "missing_citations",
+                    "fields": missing_citations,
+                }
+            )
+            
         synth_step = ResearchStep(
             run_id=run.id,
             step_index=next_index,
