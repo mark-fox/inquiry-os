@@ -607,40 +607,70 @@ class PipelineOrchestrator:
         if not sources:
             raise InvalidPipelineStateError("No sources available for synthesis.")
 
-        # Build context from summaries (bounded)
+        # Build evidence context (prefer raw_content; fall back to summary)
+        def _compact(text: str, max_chars: int) -> str:
+            t = (text or "").strip()
+            if len(t) <= max_chars:
+                return t
+            return t[: max_chars - 20].rstrip() + " ...[truncated]"
+
         context_lines: list[str] = []
         for idx, src in enumerate(sources, start=1):
-            title = src.title or src.url
-            summ = (src.summary or "").strip()
-            if not summ:
-                summ = f"(No summary) {title}"
-            context_lines.append(f"[{idx}] {title}\nURL: {src.url}\nSummary: {summ}\n")
+            title = (src.title or src.url).strip()
+            summary = (src.summary or "").strip()
+            raw = (src.raw_content or "").strip()
 
-        context = "\n".join(context_lines)
-        context = context[:12_000]  # hard cap to keep prompt reasonable
+            # Prefer raw_content, but keep it bounded (this is the real upgrade)
+            evidence_text = raw if raw else summary
+            if not evidence_text:
+                evidence_text = "(No content available for this source.)"
+
+            # Create a small “snippet pack” the model can cite
+            evidence_compact = _compact(evidence_text, 1800)
+
+            context_lines.append(
+                "\n".join(
+                    [
+                        f"[{idx}] {title}",
+                        f"URL: {src.url}",
+                        f"EVIDENCE (use for citations): {evidence_compact}",
+                    ]
+                )
+            )
+
+        context = "\n\n".join(context_lines)
+
+        # Hard cap to keep prompt reasonable (token/cost control)
+        context = _compact(context, 14_000)
 
         prompt = f"""You are an expert research assistant.
-Given a research question and summaries of sources, produce a JSON object that matches this schema:
 
-{{
-  "summary": string,
-  "key_points": [string, ...],
-  "risks": [string, ...],
-  "recommendation": string,
-  "confidence": number  // 0.0 to 1.0
-}}
+        Your job:
+        - Answer the research question using ONLY the evidence excerpts below.
+        - Every key point and every risk MUST include citations like [1], [2], etc.
+        - Prefer citing the most relevant sources; don't cite if you truly have no evidence.
 
-Rules:
-- Output MUST be valid JSON only. No markdown. No extra text.
-- Use the sources' summaries as evidence.
-- Be concise and practical.
+        Return a JSON object that matches EXACTLY this schema:
 
-Research question:
-{run.query}
+        {{
+        "summary": string,
+        "key_points": [string, ...],
+        "risks": [string, ...],
+        "recommendation": string,
+        "confidence": number
+        }}
 
-Sources:
-{context}
-"""
+        Rules:
+        - Output MUST be valid JSON only. No markdown. No extra text.
+        - Put citations directly inside the strings, e.g. "X is true because ... [1][3]"
+        - Confidence must be 0.0 to 1.0
+
+        Research question:
+        {run.query}
+
+        Evidence sources:
+        {context}
+        """
 
         # Get LLM client (Ollama by default)
         try:
