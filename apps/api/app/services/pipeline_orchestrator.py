@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 import json
+import httpx
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -428,12 +429,12 @@ class PipelineOrchestrator:
 
         semaphore = asyncio.Semaphore(4)  # keep it small; avoids hammering sites
 
-        async def read_one(src: Source) -> None:
+        async def read_one(src: Source, client: httpx.AsyncClient) -> None:
             nonlocal read_count
 
             async with semaphore:
                 try:
-                    page = await fetch_html(src.url)
+                    page = await fetch_html(src.url, client=client)
                     text = extract_text_from_html(page.html)
 
                     # Keep raw_content bounded so DB doesn't explode
@@ -450,7 +451,14 @@ class PipelineOrchestrator:
                 except Exception as exc:  # noqa: BLE001
                     failed.append({"url": src.url, "error": f"Unexpected error: {exc}"})
 
-        await asyncio.gather(*(read_one(s) for s in to_read))
+        headers = {"User-Agent": "InquiryOS/0.1 (+https://localhost)"}  # safe default
+
+        async with httpx.AsyncClient(
+            timeout=10.0,
+            follow_redirects=True,
+            headers=headers,
+        ) as client:
+            await asyncio.gather(*(read_one(s, client) for s in to_read))
 
         # Mark step status: completed even if partial, but record failures
         step = ResearchStep(

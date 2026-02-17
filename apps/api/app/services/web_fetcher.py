@@ -57,31 +57,49 @@ def _validate_url(url: str) -> None:
         raise UnsafeUrlError("Private/local IP URLs are not allowed.")
 
 
-async def fetch_html(url: str, timeout_s: float = 10.0) -> FetchedPage:
+async def _fetch_html_with_client(url: str, client: httpx.AsyncClient) -> FetchedPage:
+    async with client.stream("GET", url) as resp:
+        resp.raise_for_status()
+
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in resp.aiter_bytes():
+            if not chunk:
+                continue
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > _MAX_BYTES:
+                raise httpx.HTTPError("Response too large")
+
+        content = b"".join(chunks)
+
+    html = content.decode("utf-8", errors="replace")
+    return FetchedPage(url=url, status_code=200, html=html)
+
+
+async def fetch_html(
+    url: str,
+    timeout_s: float = 10.0,
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> FetchedPage:
     _validate_url(url)
 
     headers = {"User-Agent": _USER_AGENT}
 
-    async with httpx.AsyncClient(timeout=timeout_s, follow_redirects=True, headers=headers) as client:
-        async with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-
-            chunks: list[bytes] = []
-            total = 0
-            async for chunk in resp.aiter_bytes():
-                if not chunk:
-                    continue
-                chunks.append(chunk)
-                total += len(chunk)
-                if total > _MAX_BYTES:
-                    raise httpx.HTTPError("Response too large")
-
-            content = b"".join(chunks)
-
-    # Best-effort decode
-    html = content.decode("utf-8", errors="replace")
-
-    return FetchedPage(url=url, status_code=200, html=html)
+    # If a client is provided, reuse it. Otherwise create a one-off client.
+    if client is None:
+        async with httpx.AsyncClient(
+            timeout=timeout_s,
+            follow_redirects=True,
+            headers=headers,
+        ) as local_client:
+            return await _fetch_html_with_client(url, local_client)
+    else:
+        # Ensure headers exist even on a shared client (best-effort, don't mutate if already set)
+        if "User-Agent" not in client.headers:
+            client.headers.update(headers)
+        return await _fetch_html_with_client(url, client)
 
 
 def extract_text_from_html(html: str) -> str:
