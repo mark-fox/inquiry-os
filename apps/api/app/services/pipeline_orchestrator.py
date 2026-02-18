@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from uuid import UUID
 import json
 import httpx
+import re
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -712,34 +713,63 @@ class PipelineOrchestrator:
             }
             parse_error = f"{parse_error or ''} | schema_error={exc}".strip(" |")
 
-        # --- Citation enforcement layer ---
-        import re
-
+        # --- Citation enforcement + coverage scoring ---
         citation_pattern = re.compile(r"\[\d+\]")
 
         def _has_citation(text: str) -> bool:
             return bool(citation_pattern.search(text))
 
-        all_points = output_payload.get("key_points", [])
-        all_risks = output_payload.get("risks", [])
+        key_points = output_payload.get("key_points", [])
+        risks = output_payload.get("risks", [])
 
-        missing_citations = []
+        missing_citations: list[str] = []
 
-        for idx, point in enumerate(all_points):
+        for idx, point in enumerate(key_points):
             if isinstance(point, str) and not _has_citation(point):
                 missing_citations.append(f"key_points[{idx}]")
 
-        for idx, risk in enumerate(all_risks):
+        for idx, risk in enumerate(risks):
             if isinstance(risk, str) and not _has_citation(risk):
                 missing_citations.append(f"risks[{idx}]")
 
         if missing_citations:
             output_payload["confidence"] = min(output_payload.get("confidence", 0.5), 0.3)
             output_payload.setdefault("_warnings", []).append(
-                {
-                    "type": "missing_citations",
-                    "fields": missing_citations,
-                }
+                {"type": "missing_citations", "fields": missing_citations}
+            )
+
+        # Coverage: how many unique sources were cited?
+        source_count = len(sources)
+        cited_indices: set[int] = set()
+
+        combined_texts = []
+        if isinstance(key_points, list):
+            combined_texts.extend(key_points)
+        if isinstance(risks, list):
+            combined_texts.extend(risks)
+
+        for text in combined_texts:
+            if not isinstance(text, str):
+                continue
+            for m in re.findall(r"\[(\d+)\]", text):
+                try:
+                    n = int(m)
+                except ValueError:
+                    continue
+                if 1 <= n <= source_count:
+                    cited_indices.add(n)
+
+        coverage_ratio = (len(cited_indices) / source_count) if source_count > 0 else 0.0
+
+        # Put metrics into meta so UI can show it later
+        output_payload.setdefault("_meta", {})
+        output_payload["_meta"]["unique_sources_cited"] = len(cited_indices)
+        output_payload["_meta"]["coverage_ratio"] = coverage_ratio
+
+        if source_count >= 3 and coverage_ratio < 0.4:
+            output_payload["confidence"] = min(output_payload.get("confidence", 0.5), 0.4)
+            output_payload.setdefault("_warnings", []).append(
+                {"type": "low_source_coverage", "coverage_ratio": coverage_ratio}
             )
             
         synth_step = ResearchStep(
