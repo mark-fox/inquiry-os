@@ -558,11 +558,57 @@ export function RecentRunsPanel() {
                                                 <div className="mt-2">
                                                     <p className="text-[11px] font-semibold text-yellow-300">Warnings</p>
                                                     <ul className="mt-1 list-disc space-y-1 pl-4">
-                                                        {warnings.slice(0, 5).map((w: unknown, idx: number) => (
-                                                            <li key={idx} className="break-words">
-                                                                {typeof w === "string" ? w : JSON.stringify(w)}
-                                                            </li>
-                                                        ))}
+                                                        {warnings.slice(0, 5).map((w: unknown, idx: number) => {
+                                                            if (typeof w === "string") {
+                                                                return (
+                                                                    <li key={idx} className="break-words">
+                                                                        {w}
+                                                                    </li>
+                                                                );
+                                                            }
+
+                                                            if (typeof w === "object" && w !== null) {
+                                                                const warning = w as Record<string, unknown>;
+                                                                const type = typeof warning.type === "string" ? warning.type : "unknown_warning";
+
+                                                                if (type === "missing_citations") {
+                                                                    const fields = Array.isArray(warning.fields)
+                                                                        ? warning.fields.map((f) => String(f)).join(", ")
+                                                                        : "unknown fields";
+
+                                                                    return (
+                                                                        <li key={idx} className="break-words">
+                                                                            Some synthesis items are missing citations: {fields}.
+                                                                        </li>
+                                                                    );
+                                                                }
+
+                                                                if (type === "low_source_coverage") {
+                                                                    const ratio =
+                                                                        typeof warning.coverage_ratio === "number"
+                                                                            ? `${Math.round(warning.coverage_ratio * 100)}%`
+                                                                            : "unknown";
+
+                                                                    return (
+                                                                        <li key={idx} className="break-words">
+                                                                            Source coverage is low ({ratio} of available sources cited).
+                                                                        </li>
+                                                                    );
+                                                                }
+
+                                                                return (
+                                                                    <li key={idx} className="break-words">
+                                                                        {type}
+                                                                    </li>
+                                                                );
+                                                            }
+
+                                                            return (
+                                                                <li key={idx} className="break-words">
+                                                                    Unknown warning
+                                                                </li>
+                                                            );
+                                                        })}
                                                     </ul>
                                                 </div>
                                             )}
