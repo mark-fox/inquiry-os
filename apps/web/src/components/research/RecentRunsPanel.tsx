@@ -480,6 +480,41 @@ export function RecentRunsPanel() {
 
                             const totalSources = selectedDetail.sources.length;
                             const coveragePct = coverageRatio === null ? null : Math.round(coverageRatio * 100);
+                            const citedIndices: number[] =
+                                meta && Array.isArray(meta.cited_indices)
+                                    ? (meta.cited_indices as number[])
+                                    : [];
+
+                            {
+                                citedIndices.length > 0 && (
+                                    <div className="mt-2">
+                                        <p className="text-[11px] font-semibold text-app-text">
+                                            Cited sources
+                                        </p>
+
+                                        <ul className="mt-1 space-y-1 text-[11px] text-app-muted">
+                                            {citedIndices.map((idx) => {
+                                                const source = selectedDetail.sources[idx - 1];
+
+                                                if (!source) {
+                                                    return (
+                                                        <li key={idx}>
+                                                            [{idx}] (missing source)
+                                                        </li>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <li key={idx}>
+                                                        <span className="font-mono text-app-text">[{idx}]</span>{" "}
+                                                        {source.title || source.url}
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+                                )
+                            }
 
                             return (
                                 <div className="mt-2 space-y-2 text-[11px]">

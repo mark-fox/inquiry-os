@@ -765,6 +765,7 @@ class PipelineOrchestrator:
         output_payload.setdefault("_meta", {})
         output_payload["_meta"]["unique_sources_cited"] = len(cited_indices)
         output_payload["_meta"]["coverage_ratio"] = coverage_ratio
+        output_payload["_meta"]["cited_indices"] = sorted(list(cited_indices))
 
         if source_count >= 3 and coverage_ratio < 0.4:
             output_payload["confidence"] = min(output_payload.get("confidence", 0.5), 0.4)
