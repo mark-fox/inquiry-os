@@ -29,6 +29,15 @@ function getLatestFailureMessage(detail: ResearchRunDetail | null): string | nul
     return latestFailed?.error_message ?? null;
 }
 
+function getSynthesisOutput(detail: ResearchRunDetail | null): Record<string, unknown> | null {
+    if (!detail) return null;
+
+    const step = detail.steps.find((s) => s.step_type === "synthesizer");
+    if (!step || !step.output) return null;
+
+    return step.output as Record<string, unknown>;
+}
+
 export function RecentRunsPanel() {
     const [runs, setRuns] = useState<ResearchRunRead[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -458,6 +467,20 @@ export function RecentRunsPanel() {
                             const keyPoints = Array.isArray(out.key_points) ? out.key_points : [];
                             const risks = Array.isArray(out.risks) ? out.risks : [];
 
+                            const meta =
+                                out && typeof (out as any)._meta === "object" && (out as any)._meta !== null
+                                    ? ((out as any)._meta as Record<string, unknown>)
+                                    : null;
+
+                            const warnings = Array.isArray((out as any)._warnings) ? ((out as any)._warnings as unknown[]) : [];
+
+                            const coverageRatio = meta && typeof meta.coverage_ratio === "number" ? meta.coverage_ratio : null;
+                            const uniqueSourcesCited =
+                                meta && typeof meta.unique_sources_cited === "number" ? meta.unique_sources_cited : null;
+
+                            const totalSources = selectedDetail.sources.length;
+                            const coveragePct = coverageRatio === null ? null : Math.round(coverageRatio * 100);
+
                             return (
                                 <div className="mt-2 space-y-2 text-[11px]">
                                     <div>
@@ -509,6 +532,41 @@ export function RecentRunsPanel() {
                                         <span className="font-mono text-app-text">
                                             {confidence === null ? "n/a" : confidence.toFixed(2)}
                                         </span>
+                                    </div>
+
+                                    <div className="mt-2 rounded-md border border-app-border bg-black/40 p-2">
+                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-app-muted">
+                                            Synthesis quality
+                                        </p>
+
+                                        <div className="mt-2 space-y-1 text-[11px] text-app-muted">
+                                            <p>
+                                                Coverage:{" "}
+                                                <span className="font-mono text-app-text">
+                                                    {coveragePct === null ? "n/a" : `${coveragePct}%`}
+                                                </span>
+                                            </p>
+
+                                            <p>
+                                                Unique sources cited:{" "}
+                                                <span className="font-mono text-app-text">
+                                                    {uniqueSourcesCited === null ? "n/a" : `${uniqueSourcesCited} / ${totalSources}`}
+                                                </span>
+                                            </p>
+
+                                            {warnings.length > 0 && (
+                                                <div className="mt-2">
+                                                    <p className="text-[11px] font-semibold text-yellow-300">Warnings</p>
+                                                    <ul className="mt-1 list-disc space-y-1 pl-4">
+                                                        {warnings.slice(0, 5).map((w: unknown, idx: number) => (
+                                                            <li key={idx} className="break-words">
+                                                                {typeof w === "string" ? w : JSON.stringify(w)}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             );
