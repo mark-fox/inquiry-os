@@ -1,12 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy import select, desc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ResearchRun
-from app.db.session import get_db
+from app.db.session import get_db, AsyncSessionLocal
 from app.schemas.research_runs import (
     ResearchRunCreate,
     ResearchRunRead,
@@ -24,11 +24,17 @@ from app.services.pipeline_orchestrator import (
 from app.schemas.research_state import ResearchRunState
 from app.schemas.execution import ExecutionMode
 from app.core.config import get_settings
+from app.schemas.execution_response import ExecutionAccepted
 
 router = APIRouter(
     prefix="/research-runs",
     tags=["research-runs"],
 )
+
+async def _execute_pipeline_in_background(run_id: UUID, mode: ExecutionMode) -> None:
+    async with AsyncSessionLocal() as db:
+        orchestrator = PipelineOrchestrator(db=db)
+        await orchestrator.execute(run_id, mode)
 
 
 @router.post(
@@ -213,27 +219,45 @@ async def get_research_run_state(
 
 @router.post(
     "/{run_id}/execute",
-    response_model=ResearchRunDetail,
-    status_code=status.HTTP_200_OK,
+    response_model=ExecutionAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def execute_pipeline(
     run_id: UUID,
+    background_tasks: BackgroundTasks,
     mode: ExecutionMode = ExecutionMode.REAL,
     db: AsyncSession = Depends(get_db),
-) -> ResearchRunDetail:
-    orchestrator = PipelineOrchestrator(db=db)
-
+) -> ExecutionAccepted:
     settings = get_settings()
+
     if mode == ExecutionMode.DUMMY and settings.environment == "production":
-        raise HTTPException(status_code=403, detail="Dummy mode is disabled in production.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Dummy mode is disabled in production.",
+        )
 
-    try:
-        run = await orchestrator.execute(run_id, mode)
-    except RunNotFoundError:
-        raise HTTPException(status_code=404, detail="Research run not found")
-    except InvalidPipelineStateError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    except Exception:
-        raise HTTPException(status_code=502, detail="Pipeline execution failed")
+    run = await db.get(ResearchRun, run_id)
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Research run not found",
+        )
 
-    return run
+    if run.status == ResearchRunStatus.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Research run is already running.",
+        )
+
+    run.status = ResearchRunStatus.RUNNING
+    run.error_message = None
+    await db.commit()
+    await db.refresh(run)
+
+    background_tasks.add_task(_execute_pipeline_in_background, run_id, mode)
+
+    return ExecutionAccepted(
+        run_id=run.id,
+        status=run.status,
+        message="Pipeline execution started.",
+    )

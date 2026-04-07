@@ -124,14 +124,26 @@ export function RecentRunsPanel() {
         setDetailError(null);
 
         try {
-            const updated = await executePipeline(selectedDetail.id, "dummy");
-            setSelectedDetail(updated);
+            await executePipeline(selectedDetail.id, "dummy");
 
-            const state = await getResearchRunState(selectedDetail.id);
-            setRunState(state);
+            const maxAttempts = 20;
+            const delayMs = 1500;
 
-            const refreshedRuns = await listResearchRuns(10, 0);
-            setRuns(refreshedRuns);
+            for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+                const state = await getResearchRunState(selectedDetail.id);
+                setRunState(state);
+
+                if (state.status === "completed" || state.status === "failed") {
+                    const detail = await getResearchRunDetail(selectedDetail.id);
+                    setSelectedDetail(detail);
+
+                    const refreshedRuns = await listResearchRuns(10, 0);
+                    setRuns(refreshedRuns);
+                    break;
+                }
+
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+            }
         } catch (err) {
             const message =
                 err instanceof Error ? err.message : "Failed to execute pipeline.";
@@ -277,14 +289,26 @@ export function RecentRunsPanel() {
                                 setDetailError(null);
 
                                 try {
-                                    const updated = await executePipeline(selectedDetail.id, "real");
-                                    setSelectedDetail(updated);
+                                    await executePipeline(selectedDetail.id, "real");
 
-                                    const state = await getResearchRunState(selectedDetail.id);
-                                    setRunState(state);
+                                    const maxAttempts = 20;
+                                    const delayMs = 1500;
 
-                                    const refreshedRuns = await listResearchRuns(10, 0);
-                                    setRuns(refreshedRuns);
+                                    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+                                        const state = await getResearchRunState(selectedDetail.id);
+                                        setRunState(state);
+
+                                        if (state.status === "completed" || state.status === "failed") {
+                                            const detail = await getResearchRunDetail(selectedDetail.id);
+                                            setSelectedDetail(detail);
+
+                                            const refreshedRuns = await listResearchRuns(10, 0);
+                                            setRuns(refreshedRuns);
+                                            break;
+                                        }
+
+                                        await new Promise((resolve) => setTimeout(resolve, delayMs));
+                                    }
                                 } catch (err) {
                                     const message =
                                         err instanceof Error ? err.message : "Failed to retry pipeline.";

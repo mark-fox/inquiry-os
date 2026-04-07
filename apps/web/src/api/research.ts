@@ -84,6 +84,7 @@ export type ResearchRunState = {
 
 export type ExecutionMode = "real" | "dummy";
 
+
 export async function createResearchRun(
     payload: ResearchRunCreate,
 ): Promise<ResearchRunRead> {
@@ -120,6 +121,11 @@ export async function getResearchRunDetail(
     return (await res.json()) as ResearchRunDetail;
 }
 
+export interface ExecutionAccepted {
+    run_id: string;
+    status: ResearchRunStatus;
+    message: string;
+}
 
 export async function listResearchRuns(
     limit = 10,
@@ -224,9 +230,9 @@ export async function getResearchRunState(runId: string): Promise<ResearchRunSta
 export async function executePipeline(
     runId: string,
     mode: ExecutionMode = "real",
-): Promise<ResearchRunDetail> {
+): Promise<ExecutionAccepted> {
     const qs = new URLSearchParams({ mode }).toString();
-    return apiPost<Record<string, never>, ResearchRunDetail>(
+    return apiPost<Record<string, never>, ExecutionAccepted>(
         `/research-runs/${runId}/execute?${qs}`,
         {},
     );
