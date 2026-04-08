@@ -63,6 +63,7 @@ export interface ResearchRunDetail extends ResearchRunRead {
     steps: ResearchStepRead[];
     sources: SourceRead[];
     events: PipelineEventRead[];
+    answer?: AnswerRead | null;
 }
 
 export type ResearchStepStatus = "pending" | "running" | "completed" | "failed";
@@ -84,6 +85,15 @@ export type ResearchRunState = {
 
 export type ExecutionMode = "real" | "dummy";
 
+export interface AnswerRead {
+    data: {
+        summary: string | null;
+        key_points: string[];
+        risks: string[];
+        recommendation: string | null;
+        confidence: number | null;
+    };
+}
 
 export async function createResearchRun(
     payload: ResearchRunCreate,

@@ -108,12 +108,8 @@ export function RecentRunsPanel() {
 
 
     function getSynthOutput(detail: ResearchRunDetail | null): Record<string, unknown> | null {
-        if (!detail) return null;
-
-        const step = detail.steps.find((s) => s.step_type === "synthesizer");
-        if (!step || !step.output) return null;
-
-        return step.output as Record<string, unknown>;
+        if (!detail?.answer?.data) return null;
+        return detail.answer.data as Record<string, unknown>;
     }
 
 

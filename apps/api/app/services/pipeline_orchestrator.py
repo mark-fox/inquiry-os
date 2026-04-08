@@ -20,6 +20,7 @@ from app.db.models import (
     PipelineEvent,
     PipelineEventType,
     ExecutionMode as DbExecutionMode,
+    Answer
 )
 from datetime import datetime, timezone
 from app.services.search_clients.duckduckgo_client import DuckDuckGoClient
@@ -773,6 +774,29 @@ class PipelineOrchestrator:
                 {"type": "low_source_coverage", "coverage_ratio": coverage_ratio}
             )
             
+        # --- Persist final answer ---
+        answer = await self.db.execute(
+            select(Answer).where(Answer.run_id == run.id)
+        )
+        existing_answer = answer.scalar_one_or_none()
+
+        answer_payload = {
+            "summary": output_payload.get("summary"),
+            "key_points": output_payload.get("key_points"),
+            "risks": output_payload.get("risks"),
+            "recommendation": output_payload.get("recommendation"),
+            "confidence": output_payload.get("confidence"),
+        }
+
+        if existing_answer:
+            existing_answer.data = answer_payload
+        else:
+            new_answer = Answer(
+                run_id=run.id,
+                data=answer_payload,
+            )
+            self.db.add(new_answer)
+
         synth_step = ResearchStep(
             run_id=run.id,
             step_index=next_index,
