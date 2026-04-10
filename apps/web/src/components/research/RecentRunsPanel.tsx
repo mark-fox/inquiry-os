@@ -471,7 +471,26 @@ export function RecentRunsPanel() {
 
                         {!isExecuteRunning && (() => {
                             const out = getSynthOutput(selectedDetail);
+
+                            const synthStep = selectedDetail.steps.find(
+                                (s) => s.step_type === "synthesizer"
+                            );
+
+                            const synthFailed =
+                                synthStep?.status === "failed" && !!synthStep.error_message;
+
                             if (!out) {
+                                if (synthFailed) {
+                                    return (
+                                        <div className="mt-2 rounded-md border border-red-500/40 bg-red-500/10 p-2 text-[11px] text-red-300">
+                                            <p className="font-semibold">Synthesis failed</p>
+                                            <p className="mt-1">
+                                                {synthStep?.error_message || "Unknown error occurred during synthesis."}
+                                            </p>
+                                        </div>
+                                    );
+                                }
+
                                 return (
                                     <p className="mt-2 text-[11px] text-app-muted">
                                         No answer yet. Run the pipeline to generate one.

@@ -33,8 +33,12 @@ export interface ResearchStepRead {
     run_id: string;
     step_index: number;
     step_type: ResearchStepType;
+    status: ResearchStepStatus;
     input: Record<string, unknown> | null;
     output: Record<string, unknown> | null;
+    error_message: string | null;
+    started_at: string | null;
+    completed_at: string | null;
     created_at: string;
 }
 
