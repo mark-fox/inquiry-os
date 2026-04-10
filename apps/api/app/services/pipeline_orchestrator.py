@@ -602,222 +602,221 @@ class PipelineOrchestrator:
         if not has_reader:
             raise InvalidPipelineStateError("Run reader before synthesis.")
 
-        # Load sources (prefer summaries; fall back to title/url)
         result = await self.db.execute(select(Source).where(Source.run_id == run_id))
         sources = list(result.scalars().all())
 
         if not sources:
             raise InvalidPipelineStateError("No sources available for synthesis.")
 
-        # Build evidence context (prefer raw_content; fall back to summary)
-        def _compact(text: str, max_chars: int) -> str:
-            t = (text or "").strip()
-            if len(t) <= max_chars:
-                return t
-            return t[: max_chars - 20].rstrip() + " ...[truncated]"
-
-        context_lines: list[str] = []
-        for idx, src in enumerate(sources, start=1):
-            title = (src.title or src.url).strip()
-            summary = (src.summary or "").strip()
-            raw = (src.raw_content or "").strip()
-
-            # Prefer raw_content, but keep it bounded (this is the real upgrade)
-            evidence_text = raw if raw else summary
-            if not evidence_text:
-                evidence_text = "(No content available for this source.)"
-
-            # Create a small “snippet pack” the model can cite
-            evidence_compact = _compact(evidence_text, 1800)
-
-            context_lines.append(
-                "\n".join(
-                    [
-                        f"[{idx}] {title}",
-                        f"URL: {src.url}",
-                        f"EVIDENCE (use for citations): {evidence_compact}",
-                    ]
-                )
-            )
-
-        context = "\n\n".join(context_lines)
-
-        # Hard cap to keep prompt reasonable (token/cost control)
-        context = _compact(context, 14_000)
-
-        prompt = f"""You are an expert research assistant.
-
-        Your job:
-        - Answer the research question using ONLY the evidence excerpts below.
-        - Every key point and every risk MUST include citations like [1], [2], etc.
-        - Prefer citing the most relevant sources; don't cite if you truly have no evidence.
-
-        Return a JSON object that matches EXACTLY this schema:
-
-        {{
-        "summary": string,
-        "key_points": [string, ...],
-        "risks": [string, ...],
-        "recommendation": string,
-        "confidence": number
-        }}
-
-        Rules:
-        - Output MUST be valid JSON only. No markdown. No extra text.
-        - Put citations directly inside the strings, e.g. "X is true because ... [1][3]"
-        - Confidence must be 0.0 to 1.0
-
-        Research question:
-        {run.query}
-
-        Evidence sources:
-        {context}
-        """
-
-        # Get LLM client (Ollama by default)
-        try:
-            llm: LLMClient = get_llm_client()
-        except Exception as exc:  # noqa: BLE001
-            raise InvalidPipelineStateError(f"LLM client unavailable: {exc}")
-
         now = datetime.now(timezone.utc)
         next_index = await self._next_step_index(run_id)
 
-        raw_completion = await llm.generate(prompt=prompt, options={"max_tokens": 900})
-
-        # Parse JSON safely
-        parsed: dict
-        parse_error: str | None = None
         try:
-            parsed = json.loads(raw_completion)
-        except Exception as exc:  # noqa: BLE001
-            parsed = {
-                "summary": "Failed to parse model output as JSON.",
-                "key_points": [],
-                "risks": ["Model returned invalid JSON."],
-                "recommendation": "Try running synthesis again or adjust prompt constraints.",
-                "confidence": 0.2,
-            }
-            parse_error = str(exc)
+            def _compact(text: str, max_chars: int) -> str:
+                t = (text or "").strip()
+                if len(t) <= max_chars:
+                    return t
+                return t[: max_chars - 20].rstrip() + " ...[truncated]"
 
-        # Validate against schema (ensures stable structure)
-        try:
-            validated = SynthesisOutput.model_validate(parsed)
-            output_payload = validated.model_dump()
-        except Exception as exc:  # noqa: BLE001
-            output_payload = {
-                "summary": "Model output did not match required schema.",
-                "key_points": [],
-                "risks": ["Schema validation failed."],
-                "recommendation": "Try running synthesis again or refine the prompt/schema.",
-                "confidence": 0.2,
-            }
-            parse_error = f"{parse_error or ''} | schema_error={exc}".strip(" |")
+            context_lines: list[str] = []
+            for idx, src in enumerate(sources, start=1):
+                title = (src.title or src.url).strip()
+                summary = (src.summary or "").strip()
+                raw = (src.raw_content or "").strip()
 
-        # --- Citation enforcement + coverage scoring ---
-        citation_pattern = re.compile(r"\[\d+\]")
+                evidence_text = raw if raw else summary
+                if not evidence_text:
+                    evidence_text = "(No content available for this source.)"
 
-        def _has_citation(text: str) -> bool:
-            return bool(citation_pattern.search(text))
+                evidence_compact = _compact(evidence_text, 1800)
 
-        key_points = output_payload.get("key_points", [])
-        risks = output_payload.get("risks", [])
+                context_lines.append(
+                    "\n".join(
+                        [
+                            f"[{idx}] {title}",
+                            f"URL: {src.url}",
+                            f"EVIDENCE (use for citations): {evidence_compact}",
+                        ]
+                    )
+                )
 
-        missing_citations: list[str] = []
+            context = "\n\n".join(context_lines)
+            context = _compact(context, 14_000)
 
-        for idx, point in enumerate(key_points):
-            if isinstance(point, str) and not _has_citation(point):
-                missing_citations.append(f"key_points[{idx}]")
+            prompt = f"""You are an expert research assistant.
 
-        for idx, risk in enumerate(risks):
-            if isinstance(risk, str) and not _has_citation(risk):
-                missing_citations.append(f"risks[{idx}]")
+Your job:
+- Answer the research question using ONLY the evidence excerpts below.
+- Every key point and every risk MUST include citations like [1], [2], etc.
+- Prefer citing the most relevant sources; don't cite if you truly have no evidence.
 
-        if missing_citations:
-            output_payload["confidence"] = min(output_payload.get("confidence", 0.5), 0.3)
-            output_payload.setdefault("_warnings", []).append(
-                {"type": "missing_citations", "fields": missing_citations}
-            )
+Return a JSON object that matches EXACTLY this schema:
 
-        # Coverage: how many unique sources were cited?
-        source_count = len(sources)
-        cited_indices: set[int] = set()
+{{
+  "summary": string,
+  "key_points": [string, ...],
+  "risks": [string, ...],
+  "recommendation": string,
+  "confidence": number
+}}
 
-        combined_texts = []
-        if isinstance(key_points, list):
-            combined_texts.extend(key_points)
-        if isinstance(risks, list):
-            combined_texts.extend(risks)
+Rules:
+- Output MUST be valid JSON only. No markdown. No extra text.
+- Put citations directly inside the strings, e.g. "X is true because ... [1][3]"
+- Confidence must be 0.0 to 1.0
 
-        for text in combined_texts:
-            if not isinstance(text, str):
-                continue
-            for m in re.findall(r"\[(\d+)\]", text):
-                try:
-                    n = int(m)
-                except ValueError:
+Research question:
+{run.query}
+
+Evidence sources:
+{context}
+"""
+
+            try:
+                llm: LLMClient = get_llm_client()
+            except Exception as exc:  # noqa: BLE001
+                raise InvalidPipelineStateError(f"LLM client unavailable: {exc}")
+
+            raw_completion = await llm.generate(prompt=prompt, options={"max_tokens": 900})
+
+            parsed: dict
+            parse_error: str | None = None
+            try:
+                parsed = json.loads(raw_completion)
+            except Exception as exc:  # noqa: BLE001
+                parsed = {
+                    "summary": "Failed to parse model output as JSON.",
+                    "key_points": [],
+                    "risks": ["Model returned invalid JSON."],
+                    "recommendation": "Try running synthesis again or adjust prompt constraints.",
+                    "confidence": 0.2,
+                }
+                parse_error = str(exc)
+
+            try:
+                validated = SynthesisOutput.model_validate(parsed)
+                output_payload = validated.model_dump()
+            except Exception as exc:  # noqa: BLE001
+                output_payload = {
+                    "summary": "Model output did not match required schema.",
+                    "key_points": [],
+                    "risks": ["Schema validation failed."],
+                    "recommendation": "Try running synthesis again or refine the prompt/schema.",
+                    "confidence": 0.2,
+                }
+                parse_error = f"{parse_error or ''} | schema_error={exc}".strip(" |")
+
+            citation_pattern = re.compile(r"\[\d+\]")
+
+            def _has_citation(text: str) -> bool:
+                return bool(citation_pattern.search(text))
+
+            key_points = output_payload.get("key_points", [])
+            risks = output_payload.get("risks", [])
+
+            missing_citations: list[str] = []
+
+            for idx, point in enumerate(key_points):
+                if isinstance(point, str) and not _has_citation(point):
+                    missing_citations.append(f"key_points[{idx}]")
+
+            for idx, risk in enumerate(risks):
+                if isinstance(risk, str) and not _has_citation(risk):
+                    missing_citations.append(f"risks[{idx}]")
+
+            if missing_citations:
+                output_payload["confidence"] = min(output_payload.get("confidence", 0.5), 0.3)
+                output_payload.setdefault("_warnings", []).append(
+                    {"type": "missing_citations", "fields": missing_citations}
+                )
+
+            source_count = len(sources)
+            cited_indices: set[int] = set()
+
+            combined_texts = []
+            if isinstance(key_points, list):
+                combined_texts.extend(key_points)
+            if isinstance(risks, list):
+                combined_texts.extend(risks)
+
+            for text in combined_texts:
+                if not isinstance(text, str):
                     continue
-                if 1 <= n <= source_count:
-                    cited_indices.add(n)
+                for m in re.findall(r"\[(\d+)\]", text):
+                    try:
+                        n = int(m)
+                    except ValueError:
+                        continue
+                    if 1 <= n <= source_count:
+                        cited_indices.add(n)
 
-        coverage_ratio = (len(cited_indices) / source_count) if source_count > 0 else 0.0
+            coverage_ratio = (len(cited_indices) / source_count) if source_count > 0 else 0.0
 
-        # Put metrics into meta so UI can show it later
-        output_payload.setdefault("_meta", {})
-        output_payload["_meta"]["unique_sources_cited"] = len(cited_indices)
-        output_payload["_meta"]["coverage_ratio"] = coverage_ratio
-        output_payload["_meta"]["cited_indices"] = sorted(list(cited_indices))
+            output_payload.setdefault("_meta", {})
+            output_payload["_meta"]["unique_sources_cited"] = len(cited_indices)
+            output_payload["_meta"]["coverage_ratio"] = coverage_ratio
+            output_payload["_meta"]["cited_indices"] = sorted(list(cited_indices))
 
-        if source_count >= 3 and coverage_ratio < 0.4:
-            output_payload["confidence"] = min(output_payload.get("confidence", 0.5), 0.4)
-            output_payload.setdefault("_warnings", []).append(
-                {"type": "low_source_coverage", "coverage_ratio": coverage_ratio}
-            )
-            
-        # --- Persist final answer ---
-        answer = await self.db.execute(
-            select(Answer).where(Answer.run_id == run.id)
-        )
-        existing_answer = answer.scalar_one_or_none()
+            if source_count >= 3 and coverage_ratio < 0.4:
+                output_payload["confidence"] = min(output_payload.get("confidence", 0.5), 0.4)
+                output_payload.setdefault("_warnings", []).append(
+                    {"type": "low_source_coverage", "coverage_ratio": coverage_ratio}
+                )
 
-        answer_payload = {
-            "summary": output_payload.get("summary"),
-            "key_points": output_payload.get("key_points"),
-            "risks": output_payload.get("risks"),
-            "recommendation": output_payload.get("recommendation"),
-            "confidence": output_payload.get("confidence"),
-        }
-
-        if existing_answer:
-            existing_answer.data = answer_payload
-        else:
-            new_answer = Answer(
+            synth_step = ResearchStep(
                 run_id=run.id,
-                data=answer_payload,
-            )
-            self.db.add(new_answer)
-
-        synth_step = ResearchStep(
-            run_id=run.id,
-            step_index=next_index,
-            step_type=ResearchStepType.SYNTHESIZER,
-            input={
-                "source_ids": [str(s.id) for s in sources],
-                "model_provider": run.model_provider,
-            },
-            output={
-                **output_payload,
-                "_meta": {
-                    "raw_completion": raw_completion,
-                    "parse_error": parse_error,
-                    "source_count": len(sources),
+                step_index=next_index,
+                step_type=ResearchStepType.SYNTHESIZER,
+                status=ResearchStepStatus.COMPLETED,
+                started_at=now,
+                completed_at=datetime.now(timezone.utc),
+                error_message=None,
+                input={
+                    "source_ids": [str(s.id) for s in sources],
+                    "model_provider": run.model_provider,
                 },
-            },
-        )
-        self.db.add(synth_step)
+                output={
+                    **output_payload,
+                    "_meta": {
+                        **output_payload.get("_meta", {}),
+                        "raw_completion": raw_completion,
+                        "parse_error": parse_error,
+                        "source_count": len(sources),
+                    },
+                },
+            )
+            self.db.add(synth_step)
 
-        await self._set_status_completed(run)
+            await self._set_status_completed(run)
+            await self.db.commit()
+            await self.db.refresh(run)
+            return run
 
-        await self.db.commit()
-        await self.db.refresh(run)
-        return run
+        except Exception as exc:  # noqa: BLE001
+            failed_step = ResearchStep(
+                run_id=run.id,
+                step_index=next_index,
+                step_type=ResearchStepType.SYNTHESIZER,
+                status=ResearchStepStatus.FAILED,
+                started_at=now,
+                completed_at=datetime.now(timezone.utc),
+                error_message=str(exc),
+                input={
+                    "source_ids": [str(s.id) for s in sources],
+                    "model_provider": run.model_provider,
+                },
+                output={
+                    "summary": "Synthesis failed.",
+                    "key_points": [],
+                    "risks": ["The synthesizer stage failed before producing a valid output."],
+                    "recommendation": "Retry the pipeline or inspect the error details.",
+                    "confidence": 0.0,
+                    "_meta": {
+                        "source_count": len(sources),
+                        "failure_stage": "synthesizer",
+                    },
+                },
+            )
+            self.db.add(failed_step)
+            await self.db.commit()
+            raise
