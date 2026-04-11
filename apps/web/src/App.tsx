@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Shell } from "./components/layout/Shell";
 import { NewResearchRunForm } from "./components/research/NewResearchRunForm";
 import { RecentRunsPanel } from "./components/research/RecentRunsPanel";
 
 function App() {
+  const [autoRunId, setAutoRunId] = useState<string | null>(null);
+
   return (
     <Shell>
       <header className="mb-8">
@@ -17,10 +20,10 @@ function App() {
 
       <main className="grid gap-6 lg:grid-cols-[2fr,1.2fr]">
         <section>
-          <NewResearchRunForm />
+          <NewResearchRunForm onRunCreated={setAutoRunId} />
         </section>
         <section>
-          <RecentRunsPanel />
+          <RecentRunsPanel autoRunId={autoRunId} />
         </section>
       </main>
     </Shell>

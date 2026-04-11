@@ -38,7 +38,11 @@ function getSynthesisOutput(detail: ResearchRunDetail | null): Record<string, un
     return step.output as Record<string, unknown>;
 }
 
-export function RecentRunsPanel() {
+type RecentRunsPanelProps = {
+    autoRunId?: string | null;
+};
+
+export function RecentRunsPanel({ autoRunId }: RecentRunsPanelProps) {
     const [runs, setRuns] = useState<ResearchRunRead[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -85,6 +89,52 @@ export function RecentRunsPanel() {
         };
     }, []);
 
+
+    useEffect(() => {
+        if (!autoRunId) return;
+
+        const runId = autoRunId;
+        let cancelled = false;
+
+        async function autoRunNewResearch() {
+            setIsDetailLoading(true);
+            setIsExecuteRunning(true);
+            setDetailError(null);
+
+            try {
+                const detail = await getResearchRunDetail(runId);
+                if (cancelled) return;
+                setSelectedDetail(detail);
+
+                const refreshedRuns = await listResearchRuns(10, 0);
+                if (cancelled) return;
+                setRuns(refreshedRuns);
+
+                await executePipeline(runId, "real");
+                if (cancelled) return;
+
+                await pollRunUntilFinished(runId);
+            } catch (err) {
+                if (cancelled) return;
+                const message =
+                    err instanceof Error ? err.message : "Failed to auto-run pipeline.";
+                setDetailError(message);
+            } finally {
+                if (!cancelled) {
+                    setIsDetailLoading(false);
+                    setIsExecuteRunning(false);
+                }
+            }
+        }
+
+        autoRunNewResearch();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [autoRunId]);
+
+
     async function handleSelectRun(runId: string) {
         setIsDetailLoading(true);
         setDetailError(null);
@@ -121,25 +171,7 @@ export function RecentRunsPanel() {
 
         try {
             await executePipeline(selectedDetail.id, "dummy");
-
-            const maxAttempts = 20;
-            const delayMs = 1500;
-
-            for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-                const state = await getResearchRunState(selectedDetail.id);
-                setRunState(state);
-
-                if (state.status === "completed" || state.status === "failed") {
-                    const detail = await getResearchRunDetail(selectedDetail.id);
-                    setSelectedDetail(detail);
-
-                    const refreshedRuns = await listResearchRuns(10, 0);
-                    setRuns(refreshedRuns);
-                    break;
-                }
-
-                await new Promise((resolve) => setTimeout(resolve, delayMs));
-            }
+            await pollRunUntilFinished(selectedDetail.id);
         } catch (err) {
             const message =
                 err instanceof Error ? err.message : "Failed to execute pipeline.";
@@ -148,6 +180,28 @@ export function RecentRunsPanel() {
             setIsExecuteRunning(false);
         }
     }
+
+    async function pollRunUntilFinished(runId: string) {
+        const maxAttempts = 20;
+        const delayMs = 1500;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            const state = await getResearchRunState(runId);
+            setRunState(state);
+
+            if (state.status === "completed" || state.status === "failed") {
+                const detail = await getResearchRunDetail(runId);
+                setSelectedDetail(detail);
+
+                const refreshedRuns = await listResearchRuns(10, 0);
+                setRuns(refreshedRuns);
+                return;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+    }
+
 
     return (
         <aside className="rounded-xl border border-app-border bg-app-surface p-4 shadow-soft">
@@ -286,25 +340,7 @@ export function RecentRunsPanel() {
 
                                 try {
                                     await executePipeline(selectedDetail.id, "real");
-
-                                    const maxAttempts = 20;
-                                    const delayMs = 1500;
-
-                                    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-                                        const state = await getResearchRunState(selectedDetail.id);
-                                        setRunState(state);
-
-                                        if (state.status === "completed" || state.status === "failed") {
-                                            const detail = await getResearchRunDetail(selectedDetail.id);
-                                            setSelectedDetail(detail);
-
-                                            const refreshedRuns = await listResearchRuns(10, 0);
-                                            setRuns(refreshedRuns);
-                                            break;
-                                        }
-
-                                        await new Promise((resolve) => setTimeout(resolve, delayMs));
-                                    }
+                                    await pollRunUntilFinished(selectedDetail.id);
                                 } catch (err) {
                                     const message =
                                         err instanceof Error ? err.message : "Failed to retry pipeline.";

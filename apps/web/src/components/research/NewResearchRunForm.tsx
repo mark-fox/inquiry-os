@@ -6,7 +6,11 @@ import {
     type ResearchRunDetail,
 } from "../../api/research";
 
-export function NewResearchRunForm() {
+type NewResearchRunFormProps = {
+    onRunCreated?: (runId: string) => void;
+};
+
+export function NewResearchRunForm({ onRunCreated }: NewResearchRunFormProps) {
     const [title, setTitle] = useState("");
     const [query, setQuery] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,7 +35,8 @@ export function NewResearchRunForm() {
                 title: title.trim() || null,
             });
 
-            // Fetch the detail view so we can see planner steps
+            onRunCreated?.(run.id);
+
             const fullDetail = await getResearchRunDetail(run.id);
             setDetail(fullDetail);
         } catch (err) {
