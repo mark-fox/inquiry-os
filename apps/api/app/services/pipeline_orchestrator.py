@@ -90,6 +90,23 @@ class PipelineOrchestrator:
         indices = list(result.scalars().all())
         return (max(indices) + 1) if indices else 0
     
+    def _build_fallback_search_query(self, query: str) -> str:
+        cleaned = query.strip().lower()
+
+        # remove punctuation that often hurts simple search matching
+        for ch in ["?", "!", ",", ".", ":", ";", "(", ")", '"', "'"]:
+            cleaned = cleaned.replace(ch, " ")
+
+        # collapse extra whitespace
+        cleaned = " ".join(cleaned.split())
+
+        # keep only the first 8 words so the query is less conversational
+        words = cleaned.split()
+        if len(words) > 8:
+            cleaned = " ".join(words[:8])
+
+        return cleaned
+    
     async def run_dummy_search(self, run_id: UUID) -> ResearchRun:
         """
         Orchestrated dummy search:
@@ -341,8 +358,23 @@ class PipelineOrchestrator:
             raise InvalidPipelineStateError("Planner step missing; cannot run search.")
 
         client = DuckDuckGoClient()
-        results = await client.search(run.query, limit=limit)
 
+        search_query_used = run.query
+        results = await client.search(search_query_used, limit=limit)
+
+        if not results:
+            fallback_query = self._build_fallback_search_query(run.query)
+
+            # only retry if the fallback is actually different
+            if fallback_query and fallback_query != run.query.strip().lower():
+                search_query_used = fallback_query
+                results = await client.search(search_query_used, limit=limit)
+
+        if not results:
+            raise InvalidPipelineStateError(
+                "Search returned no results for this research question."
+            )
+        
         now = datetime.now(timezone.utc)
         next_index = await self._next_step_index(run_id)
 
@@ -353,7 +385,11 @@ class PipelineOrchestrator:
             status=ResearchStepStatus.COMPLETED,
             started_at=now,
             completed_at=now,
-            input={"query": run.query, "limit": limit},
+            input={
+                "query": run.query,
+                "effective_query": search_query_used,
+                "limit": limit,
+            },
             output={"result_count": len(results), "provider": "duckduckgo_html"},
         )
         self.db.add(step)
@@ -395,6 +431,11 @@ class PipelineOrchestrator:
         result = await self.db.execute(select(Source).where(Source.run_id == run_id))
         sources = list(result.scalars().all())
 
+        if not sources:
+            raise InvalidPipelineStateError(
+                "No sources found to read. Search returned no usable results."
+            )
+        
         # Read only sources that don't have raw_content yet
         to_read = [s for s in sources if not s.raw_content][:limit]
 

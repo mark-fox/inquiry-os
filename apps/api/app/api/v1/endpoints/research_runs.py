@@ -5,7 +5,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ResearchRun
+from app.db.models import ResearchRun, ResearchRunStatus
 from app.db.session import get_db, AsyncSessionLocal
 from app.schemas.research_runs import (
     ResearchRunCreate,
@@ -34,7 +34,12 @@ router = APIRouter(
 async def _execute_pipeline_in_background(run_id: UUID, mode: ExecutionMode) -> None:
     async with AsyncSessionLocal() as db:
         orchestrator = PipelineOrchestrator(db=db)
-        await orchestrator.execute(run_id, mode)
+        try:
+            await orchestrator.execute(run_id, mode)
+        except Exception:
+            # The orchestrator already records failure state/events.
+            # Swallow here so Starlette background tasks do not dump a giant traceback.
+            return
 
 
 @router.post(
