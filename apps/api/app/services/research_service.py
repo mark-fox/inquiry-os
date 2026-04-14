@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +13,8 @@ from app.db.models import (
     ResearchRunStatus,
     ResearchStep,
     ResearchStepType,
-    Source
+    Source,
+    ResearchStepStatus
 )
 
 
@@ -129,10 +131,15 @@ async def create_research_run_with_basic_plan(
 
     plan_output = await _generate_planner_output(query, llm)
 
+    now = datetime.now(timezone.utc)
+
     step = ResearchStep(
         run_id=run.id,
         step_index=0,
         step_type=ResearchStepType.PLANNER,
+        status=ResearchStepStatus.COMPLETED,
+        started_at=now,
+        completed_at=now,
         input={"query": query},
         output=plan_output,
     )

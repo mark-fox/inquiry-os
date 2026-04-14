@@ -90,13 +90,11 @@ export type ResearchRunState = {
 export type ExecutionMode = "real" | "dummy";
 
 export interface AnswerRead {
-    data: {
-        summary: string | null;
-        key_points: string[];
-        risks: string[];
-        recommendation: string | null;
-        confidence: number | null;
-    };
+    id: string;
+    run_id: string;
+    content: string;
+    citations: Record<string, unknown> | null;
+    created_at: string;
 }
 
 export async function createResearchRun(

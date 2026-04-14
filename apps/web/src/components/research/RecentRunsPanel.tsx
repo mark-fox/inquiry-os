@@ -158,8 +158,13 @@ export function RecentRunsPanel({ autoRunId }: RecentRunsPanelProps) {
 
 
     function getSynthOutput(detail: ResearchRunDetail | null): Record<string, unknown> | null {
-        if (!detail?.answer?.data) return null;
-        return detail.answer.data as Record<string, unknown>;
+        if (!detail?.answer?.content) return null;
+
+        try {
+            return JSON.parse(detail.answer.content) as Record<string, unknown>;
+        } catch {
+            return null;
+        }
     }
 
 

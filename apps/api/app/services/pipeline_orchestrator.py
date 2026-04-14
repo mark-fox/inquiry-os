@@ -29,12 +29,80 @@ from app.schemas.execution import ExecutionMode
 from app.core.llm import LLMClient, get_llm_client
 from app.schemas.synthesis import SynthesisOutput
 
+from bs4 import BeautifulSoup
+
 class RunNotFoundError(Exception):
     pass
 
 
 class InvalidPipelineStateError(Exception):
     pass
+
+
+def _parse_structured_synthesis_text(text: str) -> dict:
+    lines = [line.strip() for line in (text or "").splitlines()]
+
+    summary_lines: list[str] = []
+    key_points: list[str] = []
+    risks: list[str] = []
+    recommendation_lines: list[str] = []
+    confidence_value: float = 0.3
+
+    section: str | None = None
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        upper = line.upper()
+
+        if upper == "SUMMARY:":
+            section = "summary"
+            continue
+        if upper == "KEY POINTS:":
+            section = "key_points"
+            continue
+        if upper == "RISKS:":
+            section = "risks"
+            continue
+        if upper == "RECOMMENDATION:":
+            section = "recommendation"
+            continue
+        if upper == "CONFIDENCE:":
+            section = "confidence"
+            continue
+
+        if section == "summary":
+            summary_lines.append(line)
+        elif section == "key_points":
+            if line.startswith("- "):
+                key_points.append(line[2:].strip())
+            else:
+                key_points.append(line)
+        elif section == "risks":
+            if line.startswith("- "):
+                risks.append(line[2:].strip())
+            else:
+                risks.append(line)
+        elif section == "recommendation":
+            recommendation_lines.append(line)
+        elif section == "confidence":
+            try:
+                confidence_value = float(line)
+            except ValueError:
+                confidence_value = 0.3
+
+    summary = " ".join(summary_lines).strip()
+    recommendation = " ".join(recommendation_lines).strip()
+
+    return {
+        "summary": summary or "No summary provided.",
+        "key_points": key_points,
+        "risks": risks,
+        "recommendation": recommendation or "No recommendation provided.",
+        "confidence": max(0.0, min(confidence_value, 1.0)),
+    }
 
 
 @dataclass(frozen=True)
@@ -76,6 +144,19 @@ class PipelineOrchestrator:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none() is not None
 
+    async def _has_completed_step_type(
+        self,
+        run_id: UUID,
+        step_type: ResearchStepType,
+    ) -> bool:
+        stmt = select(ResearchStep.id).where(
+            ResearchStep.run_id == run_id,
+            ResearchStep.step_type == step_type,
+            ResearchStep.status == ResearchStepStatus.COMPLETED,
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none() is not None
+    
     async def _set_status_running_if_pending(self, run: ResearchRun) -> None:
         if run.status == ResearchRunStatus.PENDING:
             run.status = ResearchRunStatus.RUNNING
@@ -265,30 +346,29 @@ class PipelineOrchestrator:
         return run
     
     async def execute_dummy_pipeline(self, run_id: UUID) -> ResearchRun:
-        run = await self.get_run_detail(run_id)
+        await self.get_run_detail(run_id)
 
-        if not await self._has_step_type(run_id, ResearchStepType.SEARCHER):
+        if not await self._has_completed_step_type(run_id, ResearchStepType.SEARCHER):
             await self.run_dummy_search(run_id)
 
-        if not await self._has_step_type(run_id, ResearchStepType.READER):
+        if not await self._has_completed_step_type(run_id, ResearchStepType.READER):
             await self.run_dummy_reader(run_id)
 
-        if not await self._has_step_type(run_id, ResearchStepType.SYNTHESIZER):
+        if not await self._has_completed_step_type(run_id, ResearchStepType.SYNTHESIZER):
             await self.run_dummy_synthesis(run_id)
 
         return await self.get_run_detail(run_id)
     
     async def execute_pipeline(self, run_id: UUID) -> ResearchRun:
-        # Always return the latest persisted state at the end
         await self.get_run_detail(run_id)
 
-        if not await self._has_step_type(run_id, ResearchStepType.SEARCHER):
+        if not await self._has_completed_step_type(run_id, ResearchStepType.SEARCHER):
             await self.run_web_search(run_id, limit=5)
 
-        if not await self._has_step_type(run_id, ResearchStepType.READER):
+        if not await self._has_completed_step_type(run_id, ResearchStepType.READER):
             await self.run_web_reader(run_id, limit=5)
 
-        if not await self._has_step_type(run_id, ResearchStepType.SYNTHESIZER):
+        if not await self._has_completed_step_type(run_id, ResearchStepType.SYNTHESIZER):
             await self.run_llm_synthesis(run_id)
 
         return await self.get_run_detail(run_id)
@@ -443,9 +523,14 @@ class PipelineOrchestrator:
         next_index = await self._next_step_index(run_id)
 
         read_count = 0
+        usable_count = 0
         failed: list[dict[str, str]] = []
 
         if not to_read:
+            if usable_count == 0:
+                raise InvalidPipelineStateError(
+                    "Reader could not extract usable summaries from any sources."
+                )
             step = ResearchStep(
                 run_id=run.id,
                 step_index=next_index,
@@ -473,11 +558,22 @@ class PipelineOrchestrator:
         semaphore = asyncio.Semaphore(4)  # keep it small; avoids hammering sites
 
         async def read_one(src: Source, client: httpx.AsyncClient) -> None:
-            nonlocal read_count
+            nonlocal read_count, usable_count
 
             async with semaphore:
                 try:
                     page = await fetch_html(src.url, client=client)
+                    
+                    def extract_text_from_html(html: str) -> str:
+                        soup = BeautifulSoup(html, "lxml")
+
+                        # Remove junk
+                        for tag in soup(["script", "style", "noscript", "header", "footer", "nav", "aside"]):
+                            tag.decompose()
+
+                        text = soup.get_text(separator=" ", strip=True)
+
+                        return text
                     text = extract_text_from_html(page.html)
 
                     # Keep raw_content bounded so DB doesn't explode
@@ -485,9 +581,19 @@ class PipelineOrchestrator:
                     if not cleaned:
                         raise ValueError("Empty extracted text")
 
-                    src.raw_content = cleaned[:20_000]
-                    src.summary = basic_summary(cleaned, max_chars=900)
+                    src.raw_content = text[:20_000]
+
+                    summary = basic_summary(text, max_chars=900)
+
+                    if not summary or len(summary.strip()) < 50:
+                        summary = f"{src.title or src.url} - content could not be fully extracted."
+
+                    src.summary = summary
+
                     read_count += 1
+
+                    if len(summary.strip()) > 50:
+                        usable_count += 1
 
                 except (UnsafeUrlError, httpx.HTTPError, ValueError) as exc:
                     failed.append({"url": src.url, "error": str(exc)})
@@ -689,22 +795,32 @@ class PipelineOrchestrator:
 Your job:
 - Answer the research question using ONLY the evidence excerpts below.
 - Every key point and every risk MUST include citations like [1], [2], etc.
-- Prefer citing the most relevant sources; don't cite if you truly have no evidence.
+- Prefer citing the most relevant sources.
 
-Return a JSON object that matches EXACTLY this schema:
+Return your answer in EXACTLY this plain-text format:
 
-{{
-  "summary": string,
-  "key_points": [string, ...],
-  "risks": [string, ...],
-  "recommendation": string,
-  "confidence": number
-}}
+SUMMARY:
+<short summary>
+
+KEY POINTS:
+- <point 1 with citations>
+- <point 2 with citations>
+
+RISKS:
+- <risk 1 with citations>
+- <risk 2 with citations>
+
+RECOMMENDATION:
+<clear recommendation>
+
+CONFIDENCE:
+<single number between 0.0 and 1.0>
 
 Rules:
-- Output MUST be valid JSON only. No markdown. No extra text.
-- Put citations directly inside the strings, e.g. "X is true because ... [1][3]"
-- Confidence must be 0.0 to 1.0
+- Do NOT return JSON.
+- Do NOT use markdown code fences.
+- Do NOT add any extra sections.
+- Use citations in every key point and every risk.
 
 Research question:
 {run.query}
@@ -718,21 +834,20 @@ Evidence sources:
             except Exception as exc:  # noqa: BLE001
                 raise InvalidPipelineStateError(f"LLM client unavailable: {exc}")
 
-            raw_completion = await llm.generate(prompt=prompt, options={"max_tokens": 900})
+            raw_completion = await llm.generate(
+                prompt=prompt,
+                options={
+                    "max_tokens": 900,
+                    "temperature": 0.1,
+                },
+            )
 
             parsed: dict
             parse_error: str | None = None
             try:
-                parsed = json.loads(raw_completion)
+                parsed = _parse_structured_synthesis_text(raw_completion)
             except Exception as exc:  # noqa: BLE001
-                parsed = {
-                    "summary": "Failed to parse model output as JSON.",
-                    "key_points": [],
-                    "risks": ["Model returned invalid JSON."],
-                    "recommendation": "Try running synthesis again or adjust prompt constraints.",
-                    "confidence": 0.2,
-                }
-                parse_error = str(exc)
+                raise ValueError(f"Model returned invalid structured output: {exc}")
 
             try:
                 validated = SynthesisOutput.model_validate(parsed)
@@ -804,6 +919,25 @@ Evidence sources:
                     {"type": "low_source_coverage", "coverage_ratio": coverage_ratio}
                 )
 
+            # Persist final answer
+            result = await self.db.execute(
+                select(Answer).where(Answer.run_id == run.id)
+            )
+            existing_answer = result.scalar_one_or_none()
+
+            content_text = json.dumps(output_payload)
+
+            if existing_answer:
+                existing_answer.content = content_text
+                existing_answer.citations = output_payload.get("_meta", {})
+            else:
+                new_answer = Answer(
+                    run_id=run.id,
+                    content=content_text,
+                    citations=output_payload.get("_meta", {}),
+                )
+                self.db.add(new_answer)
+
             synth_step = ResearchStep(
                 run_id=run.id,
                 step_index=next_index,
@@ -855,6 +989,7 @@ Evidence sources:
                     "_meta": {
                         "source_count": len(sources),
                         "failure_stage": "synthesizer",
+                        "raw_completion": locals().get("raw_completion"),
                     },
                 },
             )

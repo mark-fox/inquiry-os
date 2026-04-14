@@ -36,33 +36,47 @@ class OllamaLLMClient(LLMClient):
         prompt: str,
         options: Mapping[str, Any] | None = None,
     ) -> str:
+        url = f"{self._base_url}/api/chat"
+
         payload: dict[str, Any] = {
             "model": self._model,
-            "prompt": prompt,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Follow the user's output format exactly. Do not add extra text.",
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
             "stream": False,
         }
 
-        # Allow some basic knobs via options without being too strict.
         if options:
+            if options.get("format") == "json":
+                payload["format"] = "json"
+
             temperature = options.get("temperature")
             if isinstance(temperature, (int, float)):
-                payload["temperature"] = float(temperature)
+                payload["options"] = payload.get("options", {})
+                payload["options"]["temperature"] = float(temperature)
 
-            num_predict = options.get("max_tokens") or options.get("num_predict")
-            if isinstance(num_predict, int):
-                payload["num_predict"] = num_predict
+            max_tokens = options.get("max_tokens")
+            if isinstance(max_tokens, int):
+                payload["options"] = payload.get("options", {})
+                payload["options"]["num_predict"] = max_tokens
 
-        url = f"{self._base_url}/api/generate"
-
-        # Simple async request to Ollama
         async with httpx.AsyncClient(timeout=60.0) as client:
             res = await client.post(url, json=payload)
             res.raise_for_status()
             data = res.json()
 
-        # For non-streaming, Ollama returns a single JSON with a 'response' field.
-        response_text = data.get("response", "")
-        if not isinstance(response_text, str):
-            response_text = str(response_text)
+        # Chat endpoint response shape
+        message = data.get("message", {})
+        content = message.get("content", "")
 
-        return response_text
+        if not isinstance(content, str):
+            content = str(content)
+
+        return content

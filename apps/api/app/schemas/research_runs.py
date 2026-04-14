@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from app.db.models.research_run import ResearchRunStatus
 from app.db.models.research_step import ResearchStepType
 from app.schemas.pipeline_events import PipelineEventRead
+from app.schemas.answers import AnswerRead
 
 
 class ResearchRunBase(BaseModel):
@@ -68,13 +69,7 @@ class SourceRead(BaseModel):
 
 
 class ResearchRunDetail(ResearchRunRead):
-    """
-    Detailed view of a research run, including its steps and sources.
-
-    Later we can extend this further with the final synthesized answer
-    once the synthesizer agent is implemented.
-    """
-
     steps: list[ResearchStepRead] = []
     sources: list[SourceRead] = []
     events: list[PipelineEventRead] = []
+    answer: AnswerRead | None = None
