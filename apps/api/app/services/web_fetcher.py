@@ -119,5 +119,54 @@ def basic_summary(text: str, max_chars: int = 800) -> str:
     if not text:
         return ""
 
-    # Simple: take the first max_chars of cleaned text
-    return text[:max_chars].strip()
+    cleaned = re.sub(r"\s+", " ", text).strip()
+    if not cleaned:
+        return ""
+
+    # Split into rough sentences
+    sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+
+    selected: list[str] = []
+    total_len = 0
+
+    for sentence in sentences:
+        s = sentence.strip()
+        if not s:
+            continue
+
+        # Skip very short junk fragments
+        if len(s) < 40:
+            continue
+
+        # Skip obvious navigation/UI garbage
+        lowered = s.lower()
+        if any(
+            junk in lowered
+            for junk in [
+                "cookie policy",
+                "privacy policy",
+                "terms of service",
+                "subscribe",
+                "sign up",
+                "all rights reserved",
+                "advertisement",
+                "menu",
+            ]
+        ):
+            continue
+
+        if total_len + len(s) > max_chars:
+            break
+
+        selected.append(s)
+        total_len += len(s) + 1
+
+        # Usually 3–5 good sentences is enough
+        if len(selected) >= 5:
+            break
+
+    if selected:
+        return " ".join(selected)
+
+    # Fallback if sentence splitting found nothing useful
+    return cleaned[:max_chars].strip()
