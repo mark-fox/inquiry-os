@@ -55,21 +55,21 @@ def _parse_structured_synthesis_text(text: str) -> dict:
         if not line:
             continue
 
-        upper = line.upper()
+        normalized = line.lower().rstrip(":").strip()
 
-        if upper == "SUMMARY:":
+        if normalized == "summary":
             section = "summary"
             continue
-        if upper == "KEY POINTS:":
+        if normalized in {"key points", "key point", "key findings"}:
             section = "key_points"
             continue
-        if upper == "RISKS:":
+        if normalized in {"risks", "risk", "caveats"}:
             section = "risks"
             continue
-        if upper == "RECOMMENDATION:":
+        if normalized in {"recommendation", "recommendations", "next step"}:
             section = "recommendation"
             continue
-        if upper == "CONFIDENCE:":
+        if normalized == "confidence":
             section = "confidence"
             continue
 
@@ -78,11 +78,15 @@ def _parse_structured_synthesis_text(text: str) -> dict:
         elif section == "key_points":
             if line.startswith("- "):
                 key_points.append(line[2:].strip())
+            elif line[:2].isdigit() and line[2:3] in {".", ")"}:
+                key_points.append(line[3:].strip())
             else:
                 key_points.append(line)
         elif section == "risks":
             if line.startswith("- "):
                 risks.append(line[2:].strip())
+            elif line[:2].isdigit() and line[2:3] in {".", ")"}:
+                risks.append(line[3:].strip())
             else:
                 risks.append(line)
         elif section == "recommendation":
