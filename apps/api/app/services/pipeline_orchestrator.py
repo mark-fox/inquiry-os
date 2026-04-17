@@ -794,42 +794,52 @@ class PipelineOrchestrator:
             context = "\n\n".join(context_lines)
             context = _compact(context, 14_000)
 
-            prompt = f"""You are an expert research assistant.
+            prompt = f"""You are an expert research assistant helping someone make a real decision.
 
-Your job:
-- Answer the research question using ONLY the evidence excerpts below.
-- Every key point and every risk MUST include citations like [1], [2], etc.
-- Prefer citing the most relevant sources.
+GOAL:
+Produce a high-quality, practical answer using the provided evidence sources.
 
-Return your answer in EXACTLY this plain-text format:
+REQUIREMENTS:
+
+1. Use MULTIPLE sources where possible (not just one).
+2. Every key point and every risk MUST include citations like [1], [2], etc.
+3. Do not repeat the same source for everything — aim for coverage across sources.
+4. Be specific and concrete. Avoid vague or generic statements.
+
+OUTPUT FORMAT (follow EXACTLY):
 
 SUMMARY:
-<short summary>
+A concise but clear answer to the question.
 
 KEY POINTS:
-- <point 1 with citations>
-- <point 2 with citations>
+- A meaningful point supported by evidence [n]
+- Another point supported by evidence [n]
 
 RISKS:
-- <risk 1 with citations>
-- <risk 2 with citations>
+- A real downside or uncertainty [n]
+- Another risk [n]
 
 RECOMMENDATION:
-<clear recommendation>
+Give a clear, actionable recommendation. Avoid being neutral.
 
 CONFIDENCE:
-<single number between 0.0 and 1.0>
+A number between 0.0 and 1.0
 
-Rules:
-- Do NOT return JSON.
-- Do NOT use markdown code fences.
-- Do NOT add any extra sections.
-- Use citations in every key point and every risk.
+---
+
+GUIDELINES:
+
+- Prefer using 2–4 different sources if available
+- If sources disagree, mention that
+- If evidence is weak, reflect that in confidence
+- Do NOT invent facts — only use provided summaries
+
+---
 
 Research question:
 {run.query}
 
-Evidence sources:
+Sources:
 {context}
 """
 
