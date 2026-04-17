@@ -820,7 +820,14 @@ RISKS:
 - Another risk [n]
 
 RECOMMENDATION:
-Give a clear, actionable recommendation. Avoid being neutral.
+Give a clear, actionable recommendation.
+
+Include:
+- 1–2 concrete actions the user should take next
+- A condition under which they SHOULD quit
+- A condition under which they should NOT quit
+
+Avoid generic advice like “consider your options.
 
 CONFIDENCE:
 A number between 0.0 and 1.0
@@ -833,7 +840,8 @@ GUIDELINES:
 - If sources disagree, mention that
 - If evidence is weak, reflect that in confidence
 - Do NOT invent facts — only use provided summaries
-
+- Do NOT include confidence inside the recommendation text.
+- Only include it in the CONFIDENCE section.
 ---
 
 Research question:
