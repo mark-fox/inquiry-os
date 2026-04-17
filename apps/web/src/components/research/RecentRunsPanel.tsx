@@ -168,6 +168,45 @@ export function RecentRunsPanel({ autoRunId }: RecentRunsPanelProps) {
     }
 
 
+    function renderTextWithCitations(
+        text: string,
+        sources: { url: string; title: string }[],
+    ) {
+        const parts = text.split(/(\[\d+\])/g);
+
+        return parts.map((part, idx) => {
+            const match = part.match(/^\[(\d+)\]$/);
+
+            if (!match) {
+                return <span key={idx}>{part}</span>;
+            }
+
+            const sourceIndex = Number(match[1]) - 1;
+            const source = sources[sourceIndex];
+
+            if (!source) {
+                return (
+                    <span key={idx} className="font-mono text-app-muted">
+                        {part}
+                    </span>
+                );
+            }
+
+            return (
+                <a
+                    key={idx}
+                    href={source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={source.title || source.url}
+                    className="font-mono text-app-accent hover:underline"
+                >
+                    {part}
+                </a>
+            );
+        });
+    }
+
     async function handleExecutePipeline() {
         if (!selectedDetail) return;
 
@@ -602,7 +641,9 @@ export function RecentRunsPanel({ autoRunId }: RecentRunsPanelProps) {
                                         <p className="text-[10px] font-semibold uppercase tracking-wide text-app-muted">
                                             Summary
                                         </p>
-                                        <p className="mt-1 text-app-text">{summary || "—"}</p>
+                                        <p className="mt-1 text-app-text">
+                                            {summary ? renderTextWithCitations(summary, selectedDetail.sources) : "—"}
+                                        </p>
                                     </div>
 
                                     <div>
@@ -614,7 +655,9 @@ export function RecentRunsPanel({ autoRunId }: RecentRunsPanelProps) {
                                         ) : (
                                             <ul className="mt-1 list-disc space-y-1 pl-4">
                                                 {keyPoints.map((p: unknown, idx: number) => (
-                                                    <li key={idx}>{String(p)}</li>
+                                                    <li key={idx}>
+                                                        {renderTextWithCitations(String(p), selectedDetail.sources)}
+                                                    </li>
                                                 ))}
                                             </ul>
                                         )}
@@ -629,7 +672,9 @@ export function RecentRunsPanel({ autoRunId }: RecentRunsPanelProps) {
                                         ) : (
                                             <ul className="mt-1 list-disc space-y-1 pl-4">
                                                 {risks.map((r: unknown, idx: number) => (
-                                                    <li key={idx}>{String(r)}</li>
+                                                    <li key={idx}>
+                                                        {renderTextWithCitations(String(r), selectedDetail.sources)}
+                                                    </li>
                                                 ))}
                                             </ul>
                                         )}
@@ -639,7 +684,11 @@ export function RecentRunsPanel({ autoRunId }: RecentRunsPanelProps) {
                                         <p className="text-[10px] font-semibold uppercase tracking-wide text-app-muted">
                                             Recommendation
                                         </p>
-                                        <p className="mt-1 text-app-text">{recommendation || "—"}</p>
+                                        <p className="mt-1 text-app-text">
+                                            {recommendation
+                                                ? renderTextWithCitations(recommendation, selectedDetail.sources)
+                                                : "—"}
+                                        </p>
                                     </div>
 
                                     <div className="text-[10px] text-app-muted">
