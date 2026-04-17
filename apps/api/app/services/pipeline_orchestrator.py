@@ -835,7 +835,9 @@ A number between 0.0 and 1.0
 ---
 
 GUIDELINES:
-
+- Do NOT include confidence here
+- Do NOT include extra labels like "CONFIDENCE" in this section
+- Only plain text recommendation
 - Prefer using 2–4 different sources if available
 - If sources disagree, mention that
 - If evidence is weak, reflect that in confidence
