@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type {
     ResearchRunDetail,
     ResearchRunState,
@@ -85,6 +87,9 @@ export function SelectedRunWorkspace({
     onRunPipeline,
     onRetryReal,
 }: SelectedRunWorkspaceProps) {
+    const [showExecutionHistory, setShowExecutionHistory] = useState(false);
+    const [showPlannerSteps, setShowPlannerSteps] = useState(false);
+
     if (isDetailLoading) {
         return (
             <div className="rounded-xl border border-app-border bg-app-surface p-4 shadow-soft">
@@ -379,31 +384,44 @@ export function SelectedRunWorkspace({
             <div className="mt-4 space-y-4">
                 <>
                     <div className="rounded-md border border-app-border bg-black/30 p-3">
-                        <p className="text-[11px] font-semibold">Execution history</p>
+                        <button
+                            type="button"
+                            onClick={() => setShowExecutionHistory((v) => !v)}
+                            className="flex w-full items-center justify-between text-left"
+                        >
+                            <span className="text-[11px] font-semibold">Execution history</span>
+                            <span className="text-[10px] text-app-muted">
+                                {showExecutionHistory ? "Hide" : "Show"}
+                            </span>
+                        </button>
                         <p className="mt-1 text-[10px] text-app-muted">
                             Audit trail of pipeline runs.
                         </p>
 
-                        {selectedDetail.events?.length ? (
-                            <ul className="mt-2 space-y-1 text-[11px]">
-                                {selectedDetail.events
-                                    .slice()
-                                    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
-                                    .slice(0, 8)
-                                    .map((ev) => (
-                                        <li key={ev.id} className="flex items-center justify-between">
-                                            <span className="text-app-text">
-                                                <span className="font-semibold">{ev.event_type}</span>{" "}
-                                                <span className="text-app-muted">({ev.mode})</span>
-                                            </span>
-                                            <span className="text-[10px] text-app-muted">
-                                                {ev.duration_ms != null ? `${ev.duration_ms}ms` : "—"}
-                                            </span>
-                                        </li>
-                                    ))}
-                            </ul>
-                        ) : (
-                            <p className="mt-2 text-[11px] text-app-muted">No execution events yet.</p>
+                        {showExecutionHistory && (
+                            <>
+                                {selectedDetail.events?.length ? (
+                                    <ul className="mt-2 space-y-1 text-[11px]">
+                                        {selectedDetail.events
+                                            .slice()
+                                            .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+                                            .slice(0, 8)
+                                            .map((ev) => (
+                                                <li key={ev.id} className="flex items-center justify-between">
+                                                    <span className="text-app-text">
+                                                        <span className="font-semibold">{ev.event_type}</span>{" "}
+                                                        <span className="text-app-muted">({ev.mode})</span>
+                                                    </span>
+                                                    <span className="text-[10px] text-app-muted">
+                                                        {ev.duration_ms != null ? `${ev.duration_ms}ms` : "—"}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                    </ul>
+                                ) : (
+                                    <p className="mt-2 text-[11px] text-app-muted">No execution events yet.</p>
+                                )}
+                            </>
                         )}
                     </div>
 
@@ -447,48 +465,61 @@ export function SelectedRunWorkspace({
                     </div>
 
                     <div className="rounded-md border border-app-border bg-black/30 p-3">
-                        <p className="text-[11px] font-semibold">Planner steps</p>
+                        <button
+                            type="button"
+                            onClick={() => setShowPlannerSteps((v) => !v)}
+                            className="flex w-full items-center justify-between text-left"
+                        >
+                            <span className="text-[11px] font-semibold">Planner steps</span>
+                            <span className="text-[10px] text-app-muted">
+                                {showPlannerSteps ? "Hide" : "Show"}
+                            </span>
+                        </button>
                         <p className="mt-1 text-[10px] text-app-muted">
                             Initial plan generated for this research run.
                         </p>
 
-                        {selectedDetail.steps.filter((step) => step.step_type === "planner").length === 0 ? (
-                            <p className="mt-2 text-[11px] text-app-muted">
-                                No planner steps recorded.
-                            </p>
-                        ) : (
-                            <ul className="mt-2 space-y-2">
-                                {selectedDetail.steps
-                                    .filter((step) => step.step_type === "planner")
-                                    .map((step) => {
-                                        const output = step.output ?? {};
-                                        const subquestions: unknown[] = Array.isArray((output as any).subquestions)
-                                            ? ((output as any).subquestions as unknown[])
-                                            : [];
+                        {showPlannerSteps && (
+                            <>
+                                {selectedDetail.steps.filter((step) => step.step_type === "planner").length === 0 ? (
+                                    <p className="mt-2 text-[11px] text-app-muted">
+                                        No planner steps recorded.
+                                    </p>
+                                ) : (
+                                    <ul className="mt-2 space-y-2">
+                                        {selectedDetail.steps
+                                            .filter((step) => step.step_type === "planner")
+                                            .map((step) => {
+                                                const output = step.output ?? {};
+                                                const subquestions: unknown[] = Array.isArray((output as any).subquestions)
+                                                    ? ((output as any).subquestions as unknown[])
+                                                    : [];
 
-                                        return (
-                                            <li
-                                                key={step.id}
-                                                className="rounded-md border border-app-border bg-black/50 p-2"
-                                            >
-                                                <p className="text-[10px] font-semibold uppercase tracking-wide text-app-muted">
-                                                    Planner step #{step.step_index}
-                                                </p>
-                                                {subquestions.length > 0 ? (
-                                                    <ol className="mt-1 list-decimal space-y-1 pl-4 text-[11px]">
-                                                        {subquestions.map((sq: unknown, idx: number) => (
-                                                            <li key={idx}>{String(sq)}</li>
-                                                        ))}
-                                                    </ol>
-                                                ) : (
-                                                    <p className="mt-2 text-[11px] text-app-muted">
-                                                        No subquestions found in planner output.
-                                                    </p>
-                                                )}
-                                            </li>
-                                        );
-                                    })}
-                            </ul>
+                                                return (
+                                                    <li
+                                                        key={step.id}
+                                                        className="rounded-md border border-app-border bg-black/50 p-2"
+                                                    >
+                                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-app-muted">
+                                                            Planner step #{step.step_index}
+                                                        </p>
+                                                        {subquestions.length > 0 ? (
+                                                            <ol className="mt-1 list-decimal space-y-1 pl-4 text-[11px]">
+                                                                {subquestions.map((sq: unknown, idx: number) => (
+                                                                    <li key={idx}>{String(sq)}</li>
+                                                                ))}
+                                                            </ol>
+                                                        ) : (
+                                                            <p className="mt-2 text-[11px] text-app-muted">
+                                                                No subquestions found in planner output.
+                                                            </p>
+                                                        )}
+                                                    </li>
+                                                );
+                                            })}
+                                    </ul>
+                                )}
+                            </>
                         )}
                     </div>
                 </>
