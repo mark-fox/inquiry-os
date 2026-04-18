@@ -8,7 +8,7 @@ function App() {
 
   return (
     <Shell>
-      <header className="mb-8">
+      <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">
           InquiryOS – AI Research Workspace
         </h1>
@@ -18,10 +18,11 @@ function App() {
         </p>
       </header>
 
-      <main className="grid gap-6 lg:grid-cols-[2fr,1.2fr]">
+      <main className="space-y-6">
         <section>
           <NewResearchRunForm onRunCreated={setAutoRunId} />
         </section>
+
         <section>
           <RecentRunsPanel autoRunId={autoRunId} />
         </section>

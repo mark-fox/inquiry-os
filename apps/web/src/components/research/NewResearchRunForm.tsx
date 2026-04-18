@@ -1,10 +1,6 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
-import {
-    createResearchRun,
-    getResearchRunDetail,
-    type ResearchRunDetail,
-} from "../../api/research";
+import { createResearchRun } from "../../api/research";
 
 type NewResearchRunFormProps = {
     onRunCreated?: (runId: string) => void;
@@ -15,7 +11,6 @@ export function NewResearchRunForm({ onRunCreated }: NewResearchRunFormProps) {
     const [query, setQuery] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [detail, setDetail] = useState<ResearchRunDetail | null>(null);
 
     async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -27,7 +22,6 @@ export function NewResearchRunForm({ onRunCreated }: NewResearchRunFormProps) {
 
         setIsSubmitting(true);
         setError(null);
-        setDetail(null);
 
         try {
             const run = await createResearchRun({
@@ -37,8 +31,6 @@ export function NewResearchRunForm({ onRunCreated }: NewResearchRunFormProps) {
 
             onRunCreated?.(run.id);
 
-            const fullDetail = await getResearchRunDetail(run.id);
-            setDetail(fullDetail);
         } catch (err) {
             const message =
                 err instanceof Error ? err.message : "Failed to create research run.";
@@ -49,7 +41,7 @@ export function NewResearchRunForm({ onRunCreated }: NewResearchRunFormProps) {
     }
 
     return (
-        <div className="rounded-xl border border-app-border bg-app-surface p-6 shadow-soft">
+        <div className="rounded-xl border border-app-border bg-app-surface p-5 shadow-soft">
             <h2 className="text-lg font-medium">New Research Run</h2>
             <p className="mt-2 text-sm text-app-muted">
                 Start with a complex research question. InquiryOS will eventually plan,
@@ -107,78 +99,6 @@ export function NewResearchRunForm({ onRunCreated }: NewResearchRunFormProps) {
                     )}
                 </div>
             </form>
-
-            {detail && (
-                <div className="mt-6 space-y-4">
-                    <div className="rounded-lg border border-app-border bg-app-bg/60 p-4">
-                        <h3 className="text-sm font-semibold">
-                            Run created
-                        </h3>
-                        <p className="mt-1 text-xs text-app-muted">
-                            ID: <span className="font-mono">{detail.id}</span>
-                        </p>
-                        <p className="mt-1 text-xs text-app-muted">
-                            Status:{" "}
-                            <span className="font-semibold text-app-accent">
-                                {detail.status}
-                            </span>
-                        </p>
-                        <p className="mt-1 text-xs text-app-muted">
-                            Model: <span className="font-mono">{detail.model_provider}</span>
-                        </p>
-                    </div>
-
-                    <div className="rounded-lg border border-app-border bg-app-bg/60 p-4">
-                        <h3 className="text-sm font-semibold">
-                            Planner steps
-                        </h3>
-                        <p className="mt-1 text-xs text-app-muted">
-                            Showing the basic rule-based plan (no LLM yet).
-                        </p>
-
-                        {detail.steps.length === 0 ? (
-                            <p className="mt-3 text-sm text-app-muted">
-                                No steps recorded yet.
-                            </p>
-                        ) : (
-                            <ul className="mt-3 space-y-3">
-                                {detail.steps
-                                    .filter((step) => step.step_type === "planner")
-                                    .map((step) => {
-                                        const output = step.output ?? {};
-                                        const subquestions: unknown[] = Array.isArray(
-                                            (output as any).subquestions,
-                                        )
-                                            ? ((output as any).subquestions as unknown[])
-                                            : [];
-
-                                        return (
-                                            <li
-                                                key={step.id}
-                                                className="rounded-md border border-app-border bg-black/30 p-3"
-                                            >
-                                                <p className="text-xs font-semibold uppercase tracking-wide text-app-muted">
-                                                    Planner step #{step.step_index}
-                                                </p>
-                                                {subquestions.length > 0 ? (
-                                                    <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
-                                                        {subquestions.map((sq: unknown, idx: number) => (
-                                                            <li key={idx}>{String(sq)}</li>
-                                                        ))}
-                                                    </ol>
-                                                ) : (
-                                                    <p className="mt-2 text-sm text-app-muted">
-                                                        No subquestions found in planner output.
-                                                    </p>
-                                                )}
-                                            </li>
-                                        );
-                                    })}
-                            </ul>
-                        )}
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
