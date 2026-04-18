@@ -168,8 +168,8 @@ export function SelectedRunWorkspace({
                 )}
             </div>
 
-            <div className="mt-4 grid gap-4 xl:grid-cols-[1fr,1fr]">
-                <div className="space-y-4">
+            <div className="mt-4 space-y-4">
+                <>
                     <div className="rounded-md border border-app-border bg-black/30 p-3">
                         <p className="text-[11px] font-semibold">Execution history</p>
                         <p className="mt-1 text-[10px] text-app-muted">
@@ -283,9 +283,9 @@ export function SelectedRunWorkspace({
                             </ul>
                         )}
                     </div>
-                </div>
+                </>
 
-                <div className="space-y-4">
+                <>
                     <div className="rounded-md border border-app-border bg-black/30 p-3">
                         <p className="text-[11px] font-semibold">Sources</p>
                         <p className="mt-1 text-[10px] text-app-muted">
@@ -533,7 +533,7 @@ export function SelectedRunWorkspace({
                             );
                         })()}
                     </div>
-                </div>
+                </>
             </div>
         </div>
     );
