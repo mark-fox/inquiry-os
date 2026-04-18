@@ -34,6 +34,53 @@ def _basic_plan_for_query(query: str) -> dict[str, Any]:
     }
 
 
+def _generate_title_from_query(query: str) -> str:
+    """
+    Generate a short, readable title from a research query.
+    Heuristic only (no LLM) for now.
+    """
+    if not query:
+        return "Untitled run"
+
+    q = query.strip()
+
+    # Remove trailing punctuation
+    q = q.rstrip("?.! ")
+
+    # If it starts like a question, strip common prefixes
+    prefixes = [
+        "should i ",
+        "how do i ",
+        "how to ",
+        "what is ",
+        "what are ",
+        "is it worth ",
+        "can i ",
+    ]
+
+    lower_q = q.lower()
+    for p in prefixes:
+        if lower_q.startswith(p):
+            q = q[len(p):]
+            break
+
+    # Capitalize nicely
+    words = q.split()
+    if not words:
+        return "Untitled run"
+
+    # Limit length (keep it readable in sidebar)
+    max_words = 6
+    trimmed = words[:max_words]
+
+    title = " ".join(trimmed)
+
+    # Capitalize first letter
+    title = title[0].upper() + title[1:]
+
+    return title
+
+
 async def _generate_planner_output(
     query: str,
     llm: LLMClient | None,
@@ -110,6 +157,9 @@ async def create_research_run_with_basic_plan(
 
     query = str(payload["query"])
     title = payload.get("title")
+
+    if not title or not str(title).strip():
+        title = _generate_title_from_query(query)
 
     run = ResearchRun(
         query=query,
