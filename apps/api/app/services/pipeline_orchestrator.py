@@ -827,23 +827,26 @@ Include:
 - A condition under which they SHOULD quit
 - A condition under which they should NOT quit
 
-Avoid generic advice like “consider your options.
+Rules for RECOMMENDATION:
+- Write plain recommendation text only
+- Do NOT include the word "CONFIDENCE"
+- Do NOT include any number score
+- Do NOT include any extra labels
+- Keep confidence completely separate from this section
 
 CONFIDENCE:
-A number between 0.0 and 1.0
+Write exactly one number between 0.0 and 1.0 on the next line.
+Example:
+CONFIDENCE:
+0.72
 
 ---
 
 GUIDELINES:
-- Do NOT include confidence here
-- Do NOT include extra labels like "CONFIDENCE" in this section
-- Only plain text recommendation
 - Prefer using 2–4 different sources if available
 - If sources disagree, mention that
-- If evidence is weak, reflect that in confidence
+- If evidence is weak, reflect that in the confidence score
 - Do NOT invent facts — only use provided summaries
-- Do NOT include confidence inside the recommendation text.
-- Only include it in the CONFIDENCE section.
 ---
 
 Research question:
