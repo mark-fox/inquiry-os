@@ -31,6 +31,8 @@ from app.schemas.synthesis import SynthesisOutput
 
 from bs4 import BeautifulSoup
 
+_SYNTHESIS_SOURCE_LIMIT = 3
+
 class RunNotFoundError(Exception):
     pass
 
@@ -821,17 +823,19 @@ class PipelineOrchestrator:
             raise InvalidPipelineStateError("Run reader before synthesis.")
 
         result = await self.db.execute(select(Source).where(Source.run_id == run_id))
-        sources = list(result.scalars().all())
+        all_sources = list(result.scalars().all())
 
-        sources.sort(
+        if not all_sources:
+            raise InvalidPipelineStateError("No sources available for synthesis.")
+
+        all_sources.sort(
             key=lambda s: (
                 s.relevance_score if s.relevance_score is not None else -1.0
             ),
             reverse=True,
         )
 
-        if not sources:
-            raise InvalidPipelineStateError("No sources available for synthesis.")
+        sources = all_sources[:_SYNTHESIS_SOURCE_LIMIT]
 
         now = datetime.now(timezone.utc)
         next_index = await self._next_step_index(run_id)
@@ -922,7 +926,7 @@ CONFIDENCE:
 ---
 
 GUIDELINES:
-- Prefer using 2–4 different sources if available
+- Prefer using multiple high-relevance sources from the provided set
 - If sources disagree, mention that
 - If evidence is weak, reflect that in the confidence score
 - Do NOT invent facts — only use provided summaries
@@ -1072,6 +1076,7 @@ Sources:
                         "raw_completion": raw_completion,
                         "parse_error": parse_error,
                         "source_count": len(sources),
+                        "available_source_count": len(all_sources),
                     },
                 },
             )
@@ -1103,6 +1108,7 @@ Sources:
                     "confidence": 0.0,
                     "_meta": {
                         "source_count": len(sources),
+                        "available_source_count": len(all_sources),
                         "failure_stage": "synthesizer",
                         "raw_completion": locals().get("raw_completion"),
                     },
