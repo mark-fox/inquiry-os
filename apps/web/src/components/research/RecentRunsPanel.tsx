@@ -148,25 +148,31 @@ export function RecentRunsPanel({ autoRunId }: RecentRunsPanelProps) {
 
     async function pollRunUntilFinished(runId: string) {
         const maxAttempts = 20;
-        const delayMs = 1500;
+        const delayMs = 1200;
 
         for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-            const state = await getResearchRunState(runId);
-            setRunState(state);
+            try {
+                // 1. Refresh pipeline state
+                const state = await getResearchRunState(runId);
+                setRunState(state);
 
-            if (state.status === "completed" || state.status === "failed") {
+                // 2. Refresh FULL run detail (this is the important part)
                 const detail = await getResearchRunDetail(runId);
                 setSelectedDetail(detail);
 
-                const refreshedRuns = await listResearchRuns(10, 0);
-                setRuns(refreshedRuns);
-                return;
+                // 3. Stop when done
+                if (state.status === "completed" || state.status === "failed") {
+                    const refreshedRuns = await listResearchRuns(10, 0);
+                    setRuns(refreshedRuns);
+                    return;
+                }
+            } catch {
+                // ignore transient errors
             }
 
             await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
     }
-
     async function handleExecutePipeline() {
         if (!selectedDetail) return;
 
