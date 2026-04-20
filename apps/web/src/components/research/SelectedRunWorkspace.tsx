@@ -127,6 +127,24 @@ export function SelectedRunWorkspace({
         );
     }
 
+    const synthOutput = getSynthOutput(selectedDetail);
+
+    const synthesisMeta =
+        synthOutput &&
+            typeof (synthOutput as any)._meta === "object" &&
+            (synthOutput as any)._meta !== null
+            ? ((synthOutput as any)._meta as Record<string, unknown>)
+            : null;
+
+    const usedSourceIds =
+        synthesisMeta && Array.isArray((synthesisMeta as any).used_source_ids)
+            ? new Set(
+                ((synthesisMeta as any).used_source_ids as unknown[]).map((id) =>
+                    String(id),
+                ),
+            )
+            : new Set<string>();
+
     return (
         <div className="rounded-xl border border-app-border bg-app-surface p-4 shadow-soft">
             <h2 className="text-lg font-semibold">Selected run</h2>
@@ -574,7 +592,7 @@ export function SelectedRunWorkspace({
                     <div className="rounded-md border border-app-border bg-black/30 p-3">
                         <p className="text-[11px] font-semibold">Sources</p>
                         <p className="mt-1 text-[10px] text-app-muted">
-                            Sources collected for this run, ranked by relevance and used during synthesis.
+                            Sources collected for this run, ranked by relevance. Highlighted sources were used during synthesis.
                         </p>
 
                         {selectedDetail.sources.length === 0 ? (
@@ -591,6 +609,7 @@ export function SelectedRunWorkspace({
                                     })
                                     .map((source, idx) => {
                                         const domain = getSourceDomain(source.url);
+                                        const wasUsedInSynthesis = usedSourceIds.has(source.id);
                                         const summary =
                                             source.summary && source.summary.trim().length > 0
                                                 ? source.summary
@@ -607,6 +626,13 @@ export function SelectedRunWorkspace({
                                                             <span className="rounded bg-app-bg px-1.5 py-0.5 font-mono text-[10px] text-app-accent">
                                                                 [{idx + 1}]
                                                             </span>
+
+                                                            {wasUsedInSynthesis && (
+                                                                <span className="rounded bg-app-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-app-accent">
+                                                                    used in synthesis
+                                                                </span>
+                                                            )}
+
                                                             <span className="text-[10px] text-app-muted">
                                                                 {domain}
                                                             </span>

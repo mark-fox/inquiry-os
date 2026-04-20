@@ -1077,6 +1077,7 @@ Sources:
                         "parse_error": parse_error,
                         "source_count": len(sources),
                         "available_source_count": len(all_sources),
+                        "used_source_ids": [str(s.id) for s in sources],
                     },
                 },
             )
@@ -1109,6 +1110,7 @@ Sources:
                     "_meta": {
                         "source_count": len(sources),
                         "available_source_count": len(all_sources),
+                        "used_source_ids": [str(s.id) for s in sources],
                         "failure_stage": "synthesizer",
                         "raw_completion": locals().get("raw_completion"),
                     },
