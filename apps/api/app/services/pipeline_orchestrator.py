@@ -225,6 +225,32 @@ class PipelineOrchestrator:
 
         return round(score, 3)
 
+    def _clean_recommendation_text(self, text: str) -> str:
+        """
+        Normalize recommendation text to readable sentences.
+        - Removes bullet-style dashes
+        - Fixes spacing
+        - Ensures sentence breaks
+        """
+        if not text:
+            return text
+
+        t = text.strip()
+
+        # Replace bullet-like separators with periods
+        t = re.sub(r"\s*-\s*", ". ", t)
+
+        # Collapse multiple spaces
+        t = re.sub(r"\s+", " ", t)
+
+        # Ensure proper sentence spacing after periods
+        t = re.sub(r"\.\s*", ". ", t)
+
+        # Remove accidental duplicated punctuation
+        t = re.sub(r"\.\.+", ".", t)
+
+        return t.strip()
+    
     async def run_dummy_search(self, run_id: UUID) -> ResearchRun:
         """
         Orchestrated dummy search:
@@ -933,6 +959,14 @@ Sources:
             try:
                 validated = SynthesisOutput.model_validate(parsed)
                 output_payload = validated.model_dump()
+                if "recommendation" in output_payload and isinstance(output_payload["recommendation"], str):
+                    output_payload["recommendation"] = self._clean_recommendation_text(
+                        output_payload["recommendation"]
+                    )
+                if "summary" in output_payload and isinstance(output_payload["summary"], str):
+                    output_payload["summary"] = self._clean_recommendation_text(
+                        output_payload["summary"]
+                    )
             except Exception as exc:  # noqa: BLE001
                 output_payload = {
                     "summary": "Model output did not match required schema.",
