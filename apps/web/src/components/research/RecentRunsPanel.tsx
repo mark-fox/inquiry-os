@@ -106,6 +106,25 @@ export function RecentRunsPanel({ autoRunId }: RecentRunsPanelProps) {
         };
     }, [autoRunId]);
 
+    useEffect(() => {
+        if (!selectedDetail) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const state = await getResearchRunState(selectedDetail.id);
+                setRunState(state);
+
+                if (state.status === "completed" || state.status === "failed") {
+                    clearInterval(interval);
+                }
+            } catch {
+                // ignore transient errors
+            }
+        }, 1500);
+
+        return () => clearInterval(interval);
+    }, [selectedDetail?.id]);
+
     async function handleSelectRun(runId: string) {
         setIsDetailLoading(true);
         setDetailError(null);

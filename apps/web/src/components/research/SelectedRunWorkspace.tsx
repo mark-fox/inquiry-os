@@ -99,7 +99,7 @@ export function SelectedRunWorkspace({
     const [showExecutionHistory, setShowExecutionHistory] = useState(false);
     const [showPlannerSteps, setShowPlannerSteps] = useState(false);
 
-    if (isDetailLoading) {
+    if (isDetailLoading && !selectedDetail) {
         return (
             <div className="rounded-xl border border-app-border bg-app-surface p-4 shadow-soft">
                 <p className="text-sm text-app-muted">Loading selected run…</p>
@@ -454,15 +454,52 @@ export function SelectedRunWorkspace({
                             <ul className="mt-2 space-y-1 text-[11px]">
                                 {(["planner", "searcher", "reader", "synthesizer"] as ResearchStepType[]).map((t) => {
                                     const s = runState.steps[t];
+                                    const isRunning = s.status === "running";
+                                    const isCompleted = s.status === "completed";
+                                    const isFailed = s.status === "failed";
                                     return (
-                                        <li key={t}>
-                                            <span className="font-semibold">
-                                                {t.charAt(0).toUpperCase() + t.slice(1)}:
-                                            </span>{" "}
-                                            <span className="text-app-muted">{s.status}</span>
-                                            {s.error_message ? (
-                                                <span className="ml-2 text-red-400">({s.error_message})</span>
-                                            ) : null}
+                                        <li
+                                            key={t}
+                                            className={`flex items-center justify-between rounded px-2 py-1 ${isRunning
+                                                ? "bg-app-accent/20 border border-app-accent/40"
+                                                : ""
+                                                }`}
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <span className="font-semibold">
+                                                    {t.charAt(0).toUpperCase() + t.slice(1)}:
+                                                </span>
+
+                                                {isRunning && (
+                                                    <span className="text-[10px] text-app-accent animate-pulse">
+                                                        running…
+                                                    </span>
+                                                )}
+
+                                                {isCompleted && (
+                                                    <span className="text-[10px] text-green-400">
+                                                        completed
+                                                    </span>
+                                                )}
+
+                                                {isFailed && (
+                                                    <span className="text-[10px] text-red-400">
+                                                        failed
+                                                    </span>
+                                                )}
+
+                                                {s.status === "pending" && (
+                                                    <span className="text-[10px] text-app-muted">
+                                                        pending
+                                                    </span>
+                                                )}
+                                            </span>
+
+                                            {s.error_message && (
+                                                <span className="ml-2 text-red-400 text-[10px]">
+                                                    {s.error_message}
+                                                </span>
+                                            )}
                                         </li>
                                     );
                                 })}
