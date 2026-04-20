@@ -66,6 +66,15 @@ function renderTextWithCitations(
     });
 }
 
+function getSourceDomain(url: string): string {
+    try {
+        const parsed = new URL(url);
+        return parsed.hostname.replace(/^www\./, "");
+    } catch {
+        return url;
+    }
+}
+
 type SelectedRunWorkspaceProps = {
     selectedDetail: ResearchRunDetail | null;
     isDetailLoading: boolean;
@@ -528,7 +537,7 @@ export function SelectedRunWorkspace({
                     <div className="rounded-md border border-app-border bg-black/30 p-3">
                         <p className="text-[11px] font-semibold">Sources</p>
                         <p className="mt-1 text-[10px] text-app-muted">
-                            Sources collected for this research run and used by the pipeline.
+                            Sources collected for this run, ranked by relevance and used during synthesis.
                         </p>
 
                         {selectedDetail.sources.length === 0 ? (
@@ -537,30 +546,61 @@ export function SelectedRunWorkspace({
                             </p>
                         ) : (
                             <ul className="mt-2 max-h-[420px] space-y-2 overflow-y-auto pr-1">
-                                {selectedDetail.sources.map((source) => (
-                                    <li
-                                        key={source.id}
-                                        className="rounded-md border border-app-border bg-black/50 p-2"
-                                    >
-                                        <a
-                                            href={source.url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-[11px] font-semibold text-app-accent hover:underline"
-                                        >
-                                            {source.title || source.url}
-                                        </a>
-                                        <p className="mt-1 text-[10px] text-app-muted">
-                                            {source.summary || "No summary available."}
-                                        </p>
-                                        <p className="mt-1 text-[10px] text-app-muted">
-                                            Relevance:{" "}
-                                            <span className="font-mono">
-                                                {source.relevance_score ?? "n/a"}
-                                            </span>
-                                        </p>
-                                    </li>
-                                ))}
+                                {[...selectedDetail.sources]
+                                    .sort((a, b) => {
+                                        const aScore = typeof a.relevance_score === "number" ? a.relevance_score : -1;
+                                        const bScore = typeof b.relevance_score === "number" ? b.relevance_score : -1;
+                                        return bScore - aScore;
+                                    })
+                                    .map((source, idx) => {
+                                        const domain = getSourceDomain(source.url);
+                                        const summary =
+                                            source.summary && source.summary.trim().length > 0
+                                                ? source.summary
+                                                : "No summary available.";
+
+                                        return (
+                                            <li
+                                                key={source.id}
+                                                className="rounded-md border border-app-border bg-black/50 p-3"
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="rounded bg-app-bg px-1.5 py-0.5 font-mono text-[10px] text-app-accent">
+                                                                [{idx + 1}]
+                                                            </span>
+                                                            <span className="text-[10px] text-app-muted">
+                                                                {domain}
+                                                            </span>
+                                                        </div>
+
+                                                        <a
+                                                            href={source.url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="mt-1 block text-[11px] font-semibold text-app-accent hover:underline"
+                                                        >
+                                                            {source.title || source.url}
+                                                        </a>
+                                                    </div>
+
+                                                    <div className="shrink-0 text-right">
+                                                        <p className="text-[10px] text-app-muted">Relevance</p>
+                                                        <p className="font-mono text-[11px] text-app-text">
+                                                            {typeof source.relevance_score === "number"
+                                                                ? source.relevance_score.toFixed(1)
+                                                                : "n/a"}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <p className="mt-2 line-clamp-4 text-[10px] leading-5 text-app-muted">
+                                                    {summary}
+                                                </p>
+                                            </li>
+                                        );
+                                    })}
                             </ul>
                         )}
                     </div>
