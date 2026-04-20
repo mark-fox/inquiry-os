@@ -192,6 +192,39 @@ class PipelineOrchestrator:
 
         return cleaned
     
+    def _score_source_relevance(
+        self,
+        *,
+        query: str,
+        title: str | None,
+        summary: str | None,
+        raw_content: str | None,
+    ) -> float:
+        query_terms = {
+            term
+            for term in re.findall(r"\w+", query.lower())
+            if len(term) >= 3
+        }
+
+        if not query_terms:
+            return 0.0
+
+        title_text = (title or "").lower()
+        summary_text = (summary or "").lower()
+        raw_text = (raw_content or "").lower()
+
+        score = 0.0
+
+        for term in query_terms:
+            if term in title_text:
+                score += 3.0
+            if term in summary_text:
+                score += 2.0
+            if term in raw_text:
+                score += 1.0
+
+        return round(score, 3)
+
     async def run_dummy_search(self, run_id: UUID) -> ResearchRun:
         """
         Orchestrated dummy search:
@@ -546,6 +579,7 @@ class PipelineOrchestrator:
                 output={
                     "attempted": 0,
                     "read_count": 0,
+                    "usable_count": usable_count,
                     "failed_count": 0,
                     "failed": [],
                     "notes": "No unread sources found.",
@@ -593,6 +627,13 @@ class PipelineOrchestrator:
                         summary = f"{src.title or src.url} - content could not be fully extracted."
 
                     src.summary = summary
+
+                    src.relevance_score = self._score_source_relevance(
+                        query=run.query,
+                        title=src.title,
+                        summary=src.summary,
+                        raw_content=src.raw_content,
+                    )
 
                     read_count += 1
 
@@ -756,6 +797,13 @@ class PipelineOrchestrator:
         result = await self.db.execute(select(Source).where(Source.run_id == run_id))
         sources = list(result.scalars().all())
 
+        sources.sort(
+            key=lambda s: (
+                s.relevance_score if s.relevance_score is not None else -1.0
+            ),
+            reverse=True,
+        )
+
         if not sources:
             raise InvalidPipelineStateError("No sources available for synthesis.")
 
@@ -820,19 +868,24 @@ RISKS:
 - Another risk [n]
 
 RECOMMENDATION:
-Give a clear, actionable recommendation.
+Give a clear, well-written, and actionable recommendation.
 
-Include:
-- 1–2 concrete actions the user should take next
-- A condition under which they SHOULD quit
-- A condition under which they should NOT quit
+Structure:
+- Write in 2–4 complete sentences.
+- Use proper punctuation and sentence breaks.
+- Do NOT use bullet points or dashes.
+- Each sentence should express one clear idea.
 
-Rules for RECOMMENDATION:
-- Write plain recommendation text only
+Content:
+- Include 1–2 concrete actions the user should take next
+- Include a condition under which they SHOULD quit
+- Include a condition under which they should NOT quit
+
+Rules:
+- Write natural, readable English (like a human advisor)
 - Do NOT include the word "CONFIDENCE"
-- Do NOT include any number score
-- Do NOT include any extra labels
-- Keep confidence completely separate from this section
+- Do NOT include any numeric score
+- Do NOT include labels or formatting artifacts
 
 CONFIDENCE:
 Write exactly one number between 0.0 and 1.0 on the next line.
@@ -847,6 +900,7 @@ GUIDELINES:
 - If sources disagree, mention that
 - If evidence is weak, reflect that in the confidence score
 - Do NOT invent facts — only use provided summaries
+- Avoid using hyphens or bullet-style formatting inside paragraphs.
 ---
 
 Research question:
