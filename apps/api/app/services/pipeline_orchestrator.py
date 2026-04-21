@@ -227,6 +227,45 @@ class PipelineOrchestrator:
 
         return round(score, 3)
 
+    def _select_best_sources_for_synthesis(
+        self,
+        sources: list[Source],
+        *,
+        limit: int,
+    ) -> list[Source]:
+        """
+        Select the best sources for synthesis.
+
+        Rules:
+        - prefer sources with usable summaries
+        - prefer higher relevance_score
+        - keep up to `limit`
+        """
+        def has_usable_summary(source: Source) -> bool:
+            summary = (source.summary or "").strip()
+            return len(summary) >= 50
+
+        ranked = sorted(
+            sources,
+            key=lambda s: (
+                1 if has_usable_summary(s) else 0,
+                s.relevance_score if s.relevance_score is not None else -1.0,
+            ),
+            reverse=True,
+        )
+
+        filtered = [
+            source
+            for source in ranked
+            if has_usable_summary(source)
+        ]
+
+        # If filtering becomes too aggressive, fall back to ranked list
+        if not filtered:
+            filtered = ranked
+
+        return filtered[:limit]
+    
     def _clean_recommendation_text(self, text: str) -> str:
         """
         Normalize recommendation text to readable sentences.
@@ -828,14 +867,10 @@ class PipelineOrchestrator:
         if not all_sources:
             raise InvalidPipelineStateError("No sources available for synthesis.")
 
-        all_sources.sort(
-            key=lambda s: (
-                s.relevance_score if s.relevance_score is not None else -1.0
-            ),
-            reverse=True,
+        sources = self._select_best_sources_for_synthesis(
+            all_sources,
+            limit=_SYNTHESIS_SOURCE_LIMIT,
         )
-
-        sources = all_sources[:_SYNTHESIS_SOURCE_LIMIT]
 
         now = datetime.now(timezone.utc)
         next_index = await self._next_step_index(run_id)
@@ -1078,6 +1113,7 @@ Sources:
                         "source_count": len(sources),
                         "available_source_count": len(all_sources),
                         "used_source_ids": [str(s.id) for s in sources],
+                        "filtered_out_count": len(all_sources) - len(sources),
                     },
                 },
             )
@@ -1111,6 +1147,7 @@ Sources:
                         "source_count": len(sources),
                         "available_source_count": len(all_sources),
                         "used_source_ids": [str(s.id) for s in sources],
+                        "filtered_out_count": len(all_sources) - len(sources),
                         "failure_stage": "synthesizer",
                         "raw_completion": locals().get("raw_completion"),
                     },
