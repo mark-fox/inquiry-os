@@ -1,43 +1,131 @@
 # InquiryOS – AI Research Workspace
 
-InquiryOS is an **AI research workspace / OS**.  
-Given a complex research question, InquiryOS will (over multiple phases):
+InquiryOS is an AI research application built to demonstrate practical AI engineering, full-stack development, and real-world workflow orchestration.
 
-- Plan the research using a planner agent
-- Search the web for relevant material
-- Read and summarize sources
-- Synthesize an answer with inline citations
-- Persist runs, plans, sources, and answers in a searchable research notebook UI
+Given a complex research question, InquiryOS runs a structured multi-stage pipeline that:
 
-> **Status:** Early scaffolding. Backend & frontend skeletons are in place; data model, agents, and notebook UI come next.
+- plans the research task
+- searches the web for relevant sources
+- reads and summarizes source content
+- ranks and filters sources by relevance
+- synthesizes a structured answer with citations
+
+The system persists runs, sources, steps, and answers, and presents them in a workspace-style interface designed for transparency and traceability.
+
+---
+
+## What the Application Does
+
+A user submits a research question such as:
+
+> Should I quit my job and pursue AI full time?
+
+InquiryOS then executes a staged workflow:
+
+1. **Planner**  
+   Breaks the question into smaller research sub-questions.
+
+2. **Searcher**  
+   Retrieves relevant web sources for the topic.
+
+3. **Reader**  
+   Fetches source content, extracts usable text, and produces summaries.
+
+4. **Ranker / Filter**  
+   Scores sources for relevance and selects the strongest candidates for synthesis.
+
+5. **Synthesizer**  
+   Produces a structured answer with:
+   - summary
+   - key points
+   - risks
+   - recommendation
+   - confidence score
+   - inline source citations
+
+---
+
+## Core Features
+
+- Multi-stage AI pipeline: planner → searcher → reader → synthesizer
+- Real-time execution with live status updates
+- Source relevance scoring and filtering before synthesis
+- Structured answer generation with citations
+- Answer quality indicators such as:
+  - coverage
+  - source usage
+  - confidence
+- Persistent run history with a workspace-style UI
+- Explainable source ranking hints
+- Clickable citations linked to supporting sources
+- Async execution flow with failure handling and retry support
 
 ---
 
 ## Tech Stack
 
-**Monorepo:** `inquiry-os`
+### Backend
+- Python
+- FastAPI
+- Async SQLAlchemy
+- PostgreSQL
+- Pydantic v2
+- Ollama integration through an LLM abstraction layer
+- Background task execution for pipeline runs
 
-- **Backend** – `apps/api`
-  - Python, FastAPI
-  - Pydantic Settings for config
-  - (Planned) SQLAlchemy + Postgres + asyncpg
-  - (Planned) pgvector for embeddings & retrieval
-  - (Planned) Internal agent orchestration layer (planner, searcher, reader, synthesizer)
+### Frontend
+- React
+- Vite
+- TypeScript
+- Tailwind CSS
+- Component-based workspace UI
 
-- **Frontend** – `apps/web`
-  - Vite + React + TypeScript
-  - TailwindCSS **3.4.4** (pinned, not latest)
-  - Semantic theme tokens in `tailwind.config.cjs` (e.g. `bg-app-bg`, `text-app-muted`, etc.)
-  - (Planned) shadcn/ui components
+### Infrastructure
+- Docker-based local database setup
+- Environment-driven configuration
 
-- **Infra** – `infra/` (planned)
-  - Docker & docker‑compose for local/dev environments
+---
+
+## Architecture Overview
+
+InquiryOS is designed as a modular AI system rather than a single prompt wrapper.
+
+### Major components
+
+- **Pipeline Orchestrator**  
+  Coordinates execution across each research stage.
+
+- **Planner**  
+  Creates an initial structured plan for the research question.
+
+- **Searcher**  
+  Retrieves candidate sources from the web.
+
+- **Reader**  
+  Fetches and extracts source content, then produces summaries and relevance scores.
+
+- **Synthesizer**  
+  Generates the final structured answer from the strongest sources.
+
+- **Persistence Layer**  
+  Stores research runs, steps, sources, answers, and pipeline events.
+
+- **Frontend Workspace**  
+  Displays run history, pipeline state, sources, and synthesized answers in a split-pane UI.
+
+### Engineering priorities
+
+This project emphasizes:
+
+- clear separation of concerns
+- traceable multi-step AI workflows
+- explainability over black-box outputs
+- deterministic validation around model output
+- practical full-stack architecture
 
 ---
 
 ## Repository Structure
-
-Planned / emerging structure:
 
 ```text
 inquiry-os/
@@ -45,193 +133,77 @@ inquiry-os/
     api/
       app/
         api/
-          v1/
-            endpoints/
-              # research_runs.py (planned)
-            router.py
         core/
-          config.py
-          # logging.py, llm providers, orchestrator (planned)
-      requirements.txt
-      .env.example
+        db/
+        schemas/
+        services/
     web/
-      index.html
-      package.json
-      tsconfig.json
-      vite.config.ts
-      tailwind.config.cjs
-      postcss.config.cjs
       src/
-        main.tsx
-        App.tsx
         components/
-          layout/
-            Shell.tsx
-        # api/, pages/, hooks/, types/ (planned)
+        api/
   infra/
-    # docker-compose.yml, Dockerfiles (planned)
-  .gitignore
   README.md
 ```
 
 ---
 
-## Environment & Configuration
+## Development Setup
 
-### Backend (`apps/api`)
-
-Configuration is handled via **Pydantic Settings** in `app/core/config.py`.
-
-Key environment variables (see `apps/api/.env.example`):
-
-- `API_PORT` – API port (default: `8000`)
-- `DATABASE_URL` – Postgres URL (used once DB is wired)
-- `LLM_PROVIDER` – `"ollama"` (default) or `"openai"` (planned)
-- `LLM_MODEL` – model identifier, e.g. `llama3`
-- `OLLAMA_BASE_URL` – default `http://localhost:11434`
-- `OPENAI_API_KEY` – optional, for hosted models (planned)
-- `OPENAI_MODEL` – default `gpt-4.1-mini` (planned)
-
-For local development you can copy the example file:
+### Backend
 
 ```bash
 cd apps/api
-cp .env.example .env
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
 ```
 
-The API will still run without a `.env` file thanks to sensible defaults.
+### Frontend
 
-### Frontend (`apps/web`)
+```bash
+cd apps/web
+npm install
+npm run dev
+```
 
-Tailwind and PostCSS are configured using **CommonJS** configs (because `package.json` uses `"type": "module"`):
+### Environment
 
-- `tailwind.config.cjs`
-- `postcss.config.cjs`
+Backend configuration is managed through environment variables, including:
 
-Semantic theme tokens live in `tailwind.config.cjs` under `theme.extend.colors.app`, e.g.:
+- `DATABASE_URL`
+- `LLM_PROVIDER`
+- `LLM_MODEL`
+- `OLLAMA_BASE_URL`
 
-- `bg-app-bg`
-- `bg-app-surface`
-- `border-app-border`
-- `text-app-text`
-- `text-app-muted`
-- `text-app-accent`
+Example local configuration uses:
 
-To change the visual theme of InquiryOS, you mainly update `tailwind.config.cjs` and (as needed) shared layout components like `Shell.tsx`.
-
----
-
-## Development Setup
-
-### Prerequisites
-
-- **Python** 3.11+ (or your chosen 3.x; the project uses a venv per app)
-- **Node.js** (18+ recommended)
-- **npm** (or pnpm/yarn if you prefer, but examples use npm)
+- PostgreSQL for persistence
+- Ollama for local model inference
 
 ---
 
-## Backend: FastAPI API (`apps/api`)
+## What This Project Demonstrates
 
-1. Navigate to the API app:
+InquiryOS showcases practical AI engineering skills in areas that are directly relevant to production-oriented AI roles:
 
-   ```bash
-   cd inquiry-os/apps/api
-   ```
-
-2. (Windows) List installed Python versions:
-
-   ```bash
-   py -0p
-   ```
-
-3. Create a virtual environment with a specific Python version (example: 3.11):
-
-   ```bash
-   py -3.11 -m venv .venv
-   ```
-
-4. Activate the virtual environment:
-
-   ```bash
-   .\.venv\Scripts\Activate
-   ```
-
-5. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-6. Run the API with Uvicorn:
-
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-
-7. Verify it’s working:
-
-   - Health check: http://127.0.0.1:8000/health
-   - Ping endpoint: http://127.0.0.1:8000/api/ping
+- designing multi-step AI pipelines
+- integrating LLMs into structured systems
+- combining deterministic logic with model-generated output
+- building explainable, source-backed AI features
+- handling async execution and run state management
+- developing full-stack AI applications with a clean separation between frontend and backend concerns
 
 ---
 
-## Frontend: Vite + React (`apps/web`)
+## Why This Project Matters
 
-1. Navigate to the web app:
+Many AI demos stop at a single prompt and response. InquiryOS focuses on the systems side of AI engineering:
 
-   ```bash
-   cd inquiry-os/apps/web
-   ```
+- how answers are constructed
+- which sources were used
+- how pipeline stages are executed and tracked
+- how output quality is evaluated
+- how users inspect and trust results
 
-2. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-3. Start the dev server:
-
-   ```bash
-   npm run dev
-   ```
-
-4. Open the app in your browser:
-
-   - http://localhost:5173/
-
-You should see a simple **InquiryOS – AI Research Workspace** shell with a “New Research Run” section. This shell is powered by Tailwind and a reusable `Shell` layout component.
-
----
-
-## Roadmap (High-Level)
-
-**Phase 1 – Thin Vertical Slice (MVP)**
-
-- Data model: `research_runs`, `research_steps`, `sources`, `answers`
-- Planner, searcher, reader, synthesizer agents
-- Web search + page fetching + summarization
-- Final synthesized answer with inline citations
-- Persisted research runs with basic detail view
-
-**Phase 2 – Research Notebook & UX**
-
-- List & filter past runs
-- Notebook view (Overview, Plan, Sources, Synthesis, Notes)
-- Personal notes per run
-- Split-pane and collapsible source cards
-
-**Phase 3 – Multi-Agent & Quality Controls**
-
-- Critic/verifier agent
-- Evidence scoring & confidence indicators
-- Rerun/refine flows tied to previous runs
-
-**Phase 4 – Evaluation & Show-Off Features**
-
-- Small evaluation harness (golden questions)
-- Architecture docs & diagrams
-- Optional user accounts for per-user research history
-
----
-
+The result is a stronger example of applied AI product engineering than a basic chatbot or prompt wrapper.
