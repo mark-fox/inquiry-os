@@ -75,6 +75,63 @@ function getSourceDomain(url: string): string {
     }
 }
 
+function getSourceRankingHints(
+    source: {
+        title: string;
+        summary: string | null;
+        raw_content: string | null;
+    },
+    query: string,
+    wasUsedInSynthesis: boolean,
+): string[] {
+    const queryTerms = Array.from(
+        new Set(
+            query
+                .toLowerCase()
+                .match(/\w+/g)
+                ?.filter((term) => term.length >= 3) ?? [],
+        ),
+    );
+
+    const titleText = (source.title || "").toLowerCase();
+    const summaryText = (source.summary || "").toLowerCase();
+    const rawText = (source.raw_content || "").toLowerCase();
+
+    let titleMatches = 0;
+    let summaryMatches = 0;
+    let rawMatches = 0;
+
+    for (const term of queryTerms) {
+        if (titleText.includes(term)) titleMatches += 1;
+        if (summaryText.includes(term)) summaryMatches += 1;
+        if (rawText.includes(term)) rawMatches += 1;
+    }
+
+    const hints: string[] = [];
+
+    if (titleMatches >= 2) {
+        hints.push("strong title match");
+    } else if (titleMatches === 1) {
+        hints.push("title matches query");
+    }
+
+    if (summaryMatches >= 2) {
+        hints.push("query terms found in summary");
+    } else if (summaryMatches === 1) {
+        hints.push("summary overlaps with query");
+    }
+
+    if (rawMatches >= 3) {
+        hints.push("deeper content overlap");
+    }
+
+    if (wasUsedInSynthesis) {
+        hints.push("used in synthesis");
+    }
+
+    return hints.slice(0, 3);
+}
+
 type SelectedRunWorkspaceProps = {
     selectedDetail: ResearchRunDetail | null;
     isDetailLoading: boolean;
@@ -592,7 +649,7 @@ export function SelectedRunWorkspace({
                     <div className="rounded-md border border-app-border bg-black/30 p-3">
                         <p className="text-[11px] font-semibold">Sources</p>
                         <p className="mt-1 text-[10px] text-app-muted">
-                            Sources collected for this run, ranked by relevance. Highlighted sources were used during synthesis.
+                            Sources collected for this run, ranked by relevance, with simple hints showing why they ranked well.
                         </p>
 
                         {selectedDetail.sources.length === 0 ? (
@@ -610,6 +667,11 @@ export function SelectedRunWorkspace({
                                     .map((source, idx) => {
                                         const domain = getSourceDomain(source.url);
                                         const wasUsedInSynthesis = usedSourceIds.has(source.id);
+                                        const rankingHints = getSourceRankingHints(
+                                            source,
+                                            selectedDetail.query,
+                                            wasUsedInSynthesis,
+                                        );
                                         const summary =
                                             source.summary && source.summary.trim().length > 0
                                                 ? source.summary
@@ -622,20 +684,23 @@ export function SelectedRunWorkspace({
                                             >
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0">
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex flex-wrap items-center gap-2">
                                                             <span className="rounded bg-app-bg px-1.5 py-0.5 font-mono text-[10px] text-app-accent">
                                                                 [{idx + 1}]
                                                             </span>
 
-                                                            {wasUsedInSynthesis && (
-                                                                <span className="rounded bg-app-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-app-accent">
-                                                                    used in synthesis
-                                                                </span>
-                                                            )}
-
                                                             <span className="text-[10px] text-app-muted">
                                                                 {domain}
                                                             </span>
+
+                                                            {rankingHints.map((hint, hintIdx) => (
+                                                                <span
+                                                                    key={hintIdx}
+                                                                    className="rounded bg-app-bg/70 px-1.5 py-0.5 text-[10px] text-app-muted"
+                                                                >
+                                                                    {hint}
+                                                                </span>
+                                                            ))}
                                                         </div>
 
                                                         <a
