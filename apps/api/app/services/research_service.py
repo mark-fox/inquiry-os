@@ -81,6 +81,42 @@ def _generate_title_from_query(query: str) -> str:
     return title
 
 
+async def _generate_title_with_llm(query: str) -> str:
+    llm = get_llm_client()
+
+    prompt = f"""Generate a short, professional title for this research question.
+
+Rules:
+- 3 to 6 words
+- No punctuation
+- No quotes
+- No trailing period
+- Capitalize like a title
+- Be concise and descriptive
+
+Question:
+{query}
+
+Title:"""
+
+    try:
+        raw = await llm.generate(prompt=prompt, options={"max_tokens": 20})
+        title = raw.strip()
+
+        # Cleanup safety
+        title = title.replace('"', "").strip()
+        title = title.rstrip(".")
+        title = " ".join(title.split())
+
+        if not title:
+            return _generate_title_from_query(query)
+
+        return title
+
+    except Exception:
+        return _generate_title_from_query(query)
+    
+
 async def _generate_planner_output(
     query: str,
     llm: LLMClient | None,
@@ -159,7 +195,7 @@ async def create_research_run_with_basic_plan(
     title = payload.get("title")
 
     if not title or not str(title).strip():
-        title = _generate_title_from_query(query)
+        title = await _generate_title_with_llm(query)
 
     run = ResearchRun(
         query=query,
