@@ -314,7 +314,20 @@ export function SelectedRunWorkspace({
                     const coverageRatio = meta && typeof meta.coverage_ratio === "number" ? meta.coverage_ratio : null;
                     const uniqueSourcesCited =
                         meta && typeof meta.unique_sources_cited === "number" ? meta.unique_sources_cited : null;
+                    const availableSourceCount =
+                        meta && typeof meta.available_source_count === "number"
+                            ? meta.available_source_count
+                            : null;
 
+                    const usedSourceCount =
+                        meta && typeof meta.source_count === "number"
+                            ? meta.source_count
+                            : null;
+
+                    const filteredOutCount =
+                        meta && typeof meta.filtered_out_count === "number"
+                            ? meta.filtered_out_count
+                            : null;
                     const totalSources = selectedDetail.sources.length;
 
                     return (
@@ -388,6 +401,20 @@ export function SelectedRunWorkspace({
                                 <div className="mt-2 space-y-1 text-[11px] text-app-muted">
                                     <p>
                                         Coverage:{" "}
+                                        {usedSourceCount !== null && availableSourceCount !== null && (
+                                            <p>
+                                                Sources used:{" "}
+                                                <span className="font-mono text-app-text">
+                                                    {usedSourceCount} / {availableSourceCount}
+                                                </span>
+                                                {filteredOutCount !== null && filteredOutCount > 0 && (
+                                                    <span className="text-app-muted">
+                                                        {" "}
+                                                        ({filteredOutCount} filtered out)
+                                                    </span>
+                                                )}
+                                            </p>
+                                        )}
                                         <span className="font-mono text-app-text">
                                             {coverageRatio === null ? "n/a" : `${Math.round(coverageRatio * 100)}%`}
                                         </span>
