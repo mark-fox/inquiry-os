@@ -18,7 +18,7 @@ The system persists runs, sources, steps, and answers, and presents them in a wo
 
 A user submits a research question such as:
 
-> Should I quit my job and pursue AI full time?
+> Should a startup use open-source LLMs or paid APIs for production?
 
 InquiryOS then executes a staged workflow:
 
@@ -122,6 +122,64 @@ This project emphasizes:
 - explainability over black-box outputs
 - deterministic validation around model output
 - practical full-stack architecture
+
+---
+
+## Example Output
+
+### Example 1
+
+**Research question:**
+> Is it worth starting an AI consulting business in 2026?
+
+**Pipeline behavior:**
+- Retrieved multiple web sources
+- Ranked and filtered sources before synthesis
+- Used top 3 of 5 sources for final answer
+
+**Sample output (abridged):**
+
+**Summary**  
+Starting an AI consulting business in 2026 is a viable option, but requires careful consideration of market and industry trends.
+
+**Key Points**
+- Demand for AI consulting is expected to grow as adoption increases across industries [3]  
+- Emerging areas like cloud computing and edge AI create new opportunities for consultants [1]
+
+**Risks**
+- Market saturation may make it difficult to stand out [2]  
+- Rapid technological change may require continuous reskilling [2]
+
+**Recommendation**  
+Develop a strong understanding of industry trends, build a professional network, and focus on delivering high-value solutions. Proceed only if you can continuously adapt to changing technologies and market conditions.
+
+---
+
+### Example 2
+
+**Research question:**
+> Is it better to fine-tune a model or use retrieval-augmented generation (RAG)?
+
+**Pipeline behavior:**
+- Collected and summarized multiple technical sources
+- Ranked sources based on relevance to the query
+- Filtered weaker sources before synthesis
+
+**Sample output (abridged):**
+
+**Summary**  
+Fine-tuning and RAG are different approaches to improving AI performance, with tradeoffs depending on the use case.
+
+**Key Points**
+- Fine-tuning adapts a model to specific data but may not generalize well [1]  
+- RAG retrieves external knowledge and can improve flexibility and accuracy [2]
+
+**Risks**
+- Fine-tuning can lead to overfitting and poor generalization [3]  
+- RAG systems depend on the quality of retrieved data [2]
+
+**Recommendation**  
+Use RAG when flexibility and up-to-date knowledge are required. Consider fine-tuning only when you have high-quality domain-specific data and a well-defined task.
 
 ---
 
